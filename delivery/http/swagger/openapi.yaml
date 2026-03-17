@@ -2,21 +2,208 @@ openapi: 3.0.3
 info:
   title: Personal Expense Tracker API
   description: |
-    Student Personal Expense Tracker – Team 2 endpoints (Expenses & Categories).
-    **Expenses and Categories require JWT.** Use `Authorization: Bearer <token>` (obtain token via POST /auth/login).
+    Student Personal Expense Tracker – Complete API documentation.
+    
+    **Authentication:** Most endpoints require JWT. Obtain token via `POST /auth/login` and use `Authorization: Bearer <token>` header.
+    
+    ## Features
+    - User authentication and profile management
+    - Expense tracking with categories
+    - Debt tracking (lent/borrowed)
+    - Spending reports and insights
+    - Interactive API documentation
   version: 1.0.0
 
 servers:
   - url: http://localhost:8080
-    description: Local
+    description: Local development server
+  - url: https://your-app.onrender.com
+    description: Production server (update after deployment)
 
 tags:
+  - name: Authentication
+    description: User registration and login (public endpoints)
+  - name: User
+    description: User profile management (JWT required)
   - name: Expenses
-    description: Team 2 – Daily expense logging and management (JWT required)
+    description: Daily expense logging and management (JWT required)
   - name: Categories
-    description: Team 2 – Spending categories (JWT required for write; optional for list/get)
+    description: Spending categories (JWT required)
+  - name: Debts
+    description: Track money lent/borrowed between peers (JWT required)
+  - name: Reports
+    description: Spending insights and summaries (JWT required)
+  - name: Documentation
+    description: API documentation endpoints
 
 paths:
+  # ========================================
+  # AUTHENTICATION ENDPOINTS
+  # ========================================
+  /auth/register:
+    post:
+      tags:
+        - Authentication
+      summary: Register new user
+      description: Create a new user account
+      operationId: registerUser
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/RegisterInput'
+            example:
+              name: "John Doe"
+              email: "john@university.edu"
+              password: "secure123"
+      responses:
+        '201':
+          description: User successfully registered
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AuthResponse'
+        '400':
+          description: Invalid input
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '409':
+          description: Email already exists
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+              example:
+                error: "email already used"
+
+  /auth/login:
+    post:
+      tags:
+        - Authentication
+      summary: Login user
+      description: Authenticate user and get JWT token
+      operationId: loginUser
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/LoginInput'
+            example:
+              email: "john@university.edu"
+              password: "secure123"
+      responses:
+        '200':
+          description: Successfully authenticated
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AuthResponse'
+        '401':
+          description: Invalid credentials
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+              example:
+                error: "invalid credentials"
+
+  # ========================================
+  # USER ENDPOINTS
+  # ========================================
+  /user/profile:
+    get:
+      tags:
+        - User
+      summary: Get user profile
+      description: Returns the authenticated user's profile information
+      security:
+        - BearerAuth: []
+      responses:
+        '200':
+          description: User profile retrieved successfully
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/User'
+        '401':
+          description: Missing or invalid authorization
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '404':
+          description: User not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+
+  /user/update:
+    put:
+      tags:
+        - User
+      summary: Update user profile
+      description: Update authenticated user's profile information (partial updates supported)
+      security:
+        - BearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/UpdateUserInput'
+            examples:
+              update_name:
+                summary: Update only name
+                value:
+                  name: "John Updated"
+              update_style:
+                summary: Update budgeting style
+                value:
+                  budgeting_style: "strict"
+              update_all:
+                summary: Update multiple fields
+                value:
+                  name: "John Updated"
+                  budgeting_style: "strict"
+                  default_currency: "USD"
+      responses:
+        '200':
+          description: Profile updated successfully
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  message:
+                    type: string
+                    example: "Profile updated successfully"
+        '400':
+          description: Invalid input
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '401':
+          description: Missing or invalid authorization
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '404':
+          description: User not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+
+  # ========================================
+  # EXPENSE ENDPOINTS (Team 2)
+  # ========================================
   /expenses:
     get:
       tags:
@@ -149,12 +336,15 @@ paths:
         '404':
           description: Not found
 
+  # ========================================
+  # CATEGORY ENDPOINTS (Team 2)
+  # ========================================
   /categories:
     get:
       tags:
         - Categories
       summary: List categories
-      description: List global and user-defined categories for the authenticated user. Requires JWT.
+      description: List global and user-defined categories for the authenticated user.
       security:
         - BearerAuth: []
       responses:
@@ -258,14 +448,440 @@ paths:
         '404':
           description: Not found
 
+  # ========================================
+  # DEBT ENDPOINTS
+  # ========================================
+  /debts:
+    get:
+      tags:
+        - Debts
+      summary: List all debts
+      description: Get all debts for the authenticated user
+      security:
+        - BearerAuth: []
+      responses:
+        '200':
+          description: List of debts retrieved successfully
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/Debt'
+        '401':
+          description: Missing or invalid authorization
+    post:
+      tags:
+        - Debts
+      summary: Create a new debt
+      description: Add a new debt (lent or borrowed)
+      security:
+        - BearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CreateDebtInput'
+            examples:
+              lent_money:
+                summary: Money lent to friend
+                value:
+                  type: "lent"
+                  peer_name: "Alex"
+                  amount: 100.00
+                  due_date: "2024-02-01"
+                  reminder_enabled: true
+                  note: "Movie tickets"
+              borrowed_money:
+                summary: Money borrowed from friend
+                value:
+                  type: "borrowed"
+                  peer_name: "Sarah"
+                  amount: 50.00
+                  due_date: "2024-02-15"
+                  reminder_enabled: false
+      responses:
+        '201':
+          description: Debt created successfully
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Debt'
+        '400':
+          description: Validation error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '401':
+          description: Missing or invalid authorization
+
+  /debts/upcoming:
+    get:
+      tags:
+        - Debts
+      summary: List upcoming debts
+      description: Get debts due in the next X days (default 7)
+      security:
+        - BearerAuth: []
+      parameters:
+        - name: days
+          in: query
+          description: Number of days to look ahead
+          required: false
+          schema:
+            type: integer
+            default: 7
+            minimum: 1
+            example: 7
+      responses:
+        '200':
+          description: List of upcoming debts
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/Debt'
+        '400':
+          description: Invalid days parameter
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '401':
+          description: Missing or invalid authorization
+
+  /debts/{id}:
+    get:
+      tags:
+        - Debts
+      summary: Get debt by ID
+      description: Get a specific debt by its ID
+      security:
+        - BearerAuth: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+          example: "123e4567-e89b-12d3-a456-426614174000"
+      responses:
+        '200':
+          description: Debt retrieved successfully
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Debt'
+        '401':
+          description: Missing or invalid authorization
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '404':
+          description: Debt not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+
+    put:
+      tags:
+        - Debts
+      summary: Update a debt
+      description: Update an existing debt (partial updates supported)
+      security:
+        - BearerAuth: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/UpdateDebtInput'
+            example:
+              amount: 150.00
+              note: "Updated amount"
+      responses:
+        '200':
+          description: Debt updated successfully
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Debt'
+        '400':
+          description: Validation error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '401':
+          description: Missing or invalid authorization
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '404':
+          description: Debt not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+
+  /debts/{id}/pay:
+    patch:
+      tags:
+        - Debts
+      summary: Mark debt as paid
+      description: Update debt status to 'paid'
+      security:
+        - BearerAuth: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      responses:
+        '200':
+          description: Debt marked as paid successfully
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Debt'
+        '400':
+          description: Bad request (e.g., debt already paid)
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '401':
+          description: Missing or invalid authorization
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '404':
+          description: Debt not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+
+  # ========================================
+  # REPORT ENDPOINTS
+  # ========================================
+  /reports/weekly:
+    get:
+      tags:
+        - Reports
+      summary: Get weekly spending report
+      description: Get expense and debt summary for a date range
+      security:
+        - BearerAuth: []
+      parameters:
+        - name: start
+          in: query
+          description: Start date (YYYY-MM-DD)
+          required: true
+          schema:
+            type: string
+            format: date
+          example: "2024-01-01"
+        - name: end
+          in: query
+          description: End date (YYYY-MM-DD)
+          required: true
+          schema:
+            type: string
+            format: date
+          example: "2024-01-07"
+      responses:
+        '200':
+          description: Weekly report generated successfully
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/WeeklyReport'
+        '400':
+          description: Invalid date range
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+              examples:
+                missing_params:
+                  value:
+                    error: "start and end are required"
+                invalid_date:
+                  value:
+                    error: "invalid start date"
+                invalid_range:
+                  value:
+                    error: "end date must be on or after start date"
+        '401':
+          description: Missing or invalid authorization
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+
+  # ========================================
+  # DOCUMENTATION ENDPOINTS
+  # ========================================
+  /api-docs:
+    get:
+      tags:
+        - Documentation
+      summary: API documentation redirect
+      description: Redirects to the Swagger UI interface
+      responses:
+        '301':
+          description: Redirecting to /api-docs/
+
+  /api-docs/:
+    get:
+      tags:
+        - Documentation
+      summary: Swagger UI
+      description: Interactive API documentation interface
+      responses:
+        '200':
+          description: Swagger UI HTML page
+          content:
+            text/html:
+              schema:
+                type: string
+
+  /api-docs/openapi.yaml:
+    get:
+      tags:
+        - Documentation
+      summary: OpenAPI specification
+      description: Raw OpenAPI YAML file
+      responses:
+        '200':
+          description: OpenAPI specification
+          content:
+            application/yaml:
+              schema:
+                type: string
+
 components:
   securitySchemes:
     BearerAuth:
       type: http
       scheme: bearer
       bearerFormat: JWT
-      description: JWT from POST /auth/login
+      description: Enter your JWT token in the format "Bearer &lt;token&gt;"
+
   schemas:
+    # ========================================
+    # USER SCHEMAS
+    # ========================================
+    User:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+          example: "123e4567-e89b-12d3-a456-426614174000"
+        name:
+          type: string
+          example: "John Doe"
+        email:
+          type: string
+          format: email
+          example: "student@university.edu"
+        budgeting_style:
+          type: string
+          enum: [strict, flexible, none]
+          example: "flexible"
+        default_currency:
+          type: string
+          example: "ETB"
+        created_at:
+          type: string
+          format: date-time
+          example: "2024-01-01T10:30:00Z"
+
+    UpdateUserInput:
+      type: object
+      properties:
+        name:
+          type: string
+          example: "John Updated"
+        budgeting_style:
+          type: string
+          enum: [strict, flexible, none]
+          example: "strict"
+        default_currency:
+          type: string
+          example: "USD"
+      minProperties: 1
+      description: All fields are optional - send only what you want to update
+
+    # ========================================
+    # AUTH SCHEMAS
+    # ========================================
+    RegisterInput:
+      type: object
+      required:
+        - name
+        - email
+        - password
+      properties:
+        name:
+          type: string
+          example: "John Doe"
+        email:
+          type: string
+          format: email
+          example: "student@university.edu"
+        password:
+          type: string
+          format: password
+          minLength: 6
+          example: "secure123"
+
+    LoginInput:
+      type: object
+      required:
+        - email
+        - password
+      properties:
+        email:
+          type: string
+          format: email
+          example: "student@university.edu"
+        password:
+          type: string
+          format: password
+          example: "secure123"
+
+    AuthResponse:
+      type: object
+      properties:
+        token:
+          type: string
+          example: "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJ1c2VyX2lkIjoiMTIzZTQ1NjctZTg5Yi0xMmQzLWE0NTYtNDI2NjE0MTc0MDAwIiwiZXhwIjoxNzA1MjgwMDAwfQ.signature"
+        user:
+          $ref: '#/components/schemas/User'
+
+    # ========================================
+    # EXPENSE SCHEMAS (Team 2)
+    # ========================================
     Expense:
       type: object
       properties:
@@ -305,6 +921,7 @@ components:
         created_at:
           type: string
           format: date-time
+
     CreateExpenseRequest:
       type: object
       required:
@@ -338,6 +955,7 @@ components:
         expense_date:
           type: string
           format: date
+
     UpdateExpenseRequest:
       type: object
       properties:
@@ -364,6 +982,10 @@ components:
         expense_date:
           type: string
           format: date
+
+    # ========================================
+    # CATEGORY SCHEMAS (Team 2)
+    # ========================================
     Category:
       type: object
       properties:
@@ -376,6 +998,7 @@ components:
           type: string
           format: uuid
           nullable: true
+
     CreateCategoryRequest:
       type: object
       required:
@@ -387,8 +1010,162 @@ components:
           type: string
           format: uuid
           nullable: true
+
     UpdateCategoryRequest:
       type: object
       properties:
         name:
           type: string
+
+    # ========================================
+    # DEBT SCHEMAS
+    # ========================================
+    Debt:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+          example: "123e4567-e89b-12d3-a456-426614174000"
+        user_id:
+          type: string
+          format: uuid
+          example: "123e4567-e89b-12d3-a456-426614174000"
+        type:
+          type: string
+          enum: [lent, borrowed]
+          example: "lent"
+        peer_name:
+          type: string
+          example: "Alex"
+        amount:
+          type: number
+          format: float
+          example: 100.50
+        due_date:
+          type: string
+          format: date
+          example: "2024-02-01"
+        status:
+          type: string
+          enum: [pending, paid, overdue]
+          example: "pending"
+        reminder_enabled:
+          type: boolean
+          example: true
+        note:
+          type: string
+          nullable: true
+          example: "Movie tickets"
+        created_at:
+          type: string
+          format: date-time
+          example: "2024-01-15T10:30:00Z"
+
+    CreateDebtInput:
+      type: object
+      required:
+        - type
+        - peer_name
+        - amount
+        - due_date
+      properties:
+        type:
+          type: string
+          enum: [lent, borrowed]
+          example: "lent"
+        peer_name:
+          type: string
+          example: "Alex"
+        amount:
+          type: number
+          format: float
+          minimum: 0.01
+          example: 100.50
+        due_date:
+          type: string
+          format: date
+          example: "2024-02-01"
+        reminder_enabled:
+          type: boolean
+          default: false
+          example: true
+        note:
+          type: string
+          example: "Movie tickets"
+
+    UpdateDebtInput:
+      type: object
+      properties:
+        type:
+          type: string
+          enum: [lent, borrowed]
+          example: "borrowed"
+        peer_name:
+          type: string
+          example: "Sarah"
+        amount:
+          type: number
+          format: float
+          minimum: 0.01
+          example: 150.00
+        due_date:
+          type: string
+          format: date
+          example: "2024-03-01"
+        reminder_enabled:
+          type: boolean
+          example: false
+        note:
+          type: string
+          example: "Updated note"
+      minProperties: 1
+
+    # ========================================
+    # REPORT SCHEMAS
+    # ========================================
+    WeeklyReport:
+      type: object
+      properties:
+        start_date:
+          type: string
+          format: date
+          example: "2024-01-01"
+        end_date:
+          type: string
+          format: date
+          example: "2024-01-07"
+        total_expense:
+          type: number
+          format: float
+          example: 250.75
+        total_lent:
+          type: number
+          format: float
+          example: 50.00
+        total_borrowed:
+          type: number
+          format: float
+          example: 0
+        category_breakdown:
+          type: array
+          items:
+            type: object
+            properties:
+              category_name:
+                type: string
+                example: "Food"
+              total:
+                type: number
+                format: float
+                example: 120.50
+
+    # ========================================
+    # ERROR SCHEMA
+    # ========================================
+    Error:
+      type: object
+      properties:
+        error:
+          type: string
+          example: "Invalid credentials"
