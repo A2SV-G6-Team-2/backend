@@ -20,7 +20,6 @@ type DailyReport struct {
 
 type ReportUsecase interface {
 	GetWeeklyReport(ctx context.Context, userID uuid.UUID, startDate, endDate time.Time) (WeeklyReport, error)
-	GetMonthlyReport(ctx context.Context, userID uuid.UUID, startDate, endDate time.Time) (MonthlyReport, error)
 	
 	GetDailyReport(ctx context.Context, userID uuid.UUID, date time.Time) (DailyReport, error)
 }
@@ -37,20 +36,6 @@ type WeeklyReport struct {
 }
 
 type WeeklyCategorySummary struct {
-	CategoryName string  `json:"category_name"`
-	Total        float64 `json:"total"`
-}
-
-type MonthlyReport struct {
-	StartDate         string                   `json:"start_date"`
-	EndDate           string                   `json:"end_date"`
-	TotalExpense      float64                  `json:"total_expense"`
-	TotalLent         float64                  `json:"total_lent"`
-	TotalBorrowed     float64                  `json:"total_borrowed"`
-	CategoryBreakdown []MonthlyCategorySummary `json:"category_breakdown"`
-}
-
-type MonthlyCategorySummary struct {
 	CategoryName string  `json:"category_name"`
 	Total        float64 `json:"total"`
 }
@@ -133,48 +118,4 @@ func (r *reportUsecase) GetWeeklyReport(ctx context.Context, userID uuid.UUID, s
 		TotalBorrowed:     totalBorrowed,
 		CategoryBreakdown: categoryBreakdown,
 	}, nil
-}
-
-func (r *reportUsecase) GetMonthlyReport(ctx context.Context, userID uuid.UUID, startDate, endDate time.Time) (MonthlyReport, error) {
-	if endDate.Before(startDate) {
-		return MonthlyReport{}, ErrInvalidDateRange
-	}
-
-	totalExpense, err := r.expenseRepo.SumByDateRange(ctx, userID, startDate, endDate)
-	if err != nil {
-		return MonthlyReport{}, err
-	}
-
-	categoryTotals, err := r.expenseRepo.CategoryBreakdownByDateRange(ctx, userID, startDate, endDate)
-	if err != nil {
-		return MonthlyReport{}, err
-	}
-
-	categoryBreakdown := make([]MonthlyCategorySummary, 0, len(categoryTotals))
-	for _, item := range categoryTotals {
-		categoryBreakdown = append(categoryBreakdown, MonthlyCategorySummary{
-			CategoryName: item.CategoryName,
-			Total:        item.Total,
-		})
-	}
-
-	totalLent, err := r.debtRepo.SumByDateRangeAndType(ctx, userID, startDate, endDate, "lent")
-	if err != nil {
-		return MonthlyReport{}, err
-	}
-
-	totalBorrowed, err := r.debtRepo.SumByDateRangeAndType(ctx, userID, startDate, endDate, "borrowed")
-	if err != nil {
-		return MonthlyReport{}, err
-	}
-
-	return MonthlyReport{
-		StartDate:         startDate.Format("2006-01-02"),
-		EndDate:           endDate.Format("2006-01-02"),
-		TotalExpense:      totalExpense,
-		TotalLent:         totalLent,
-		TotalBorrowed:     totalBorrowed,
-		CategoryBreakdown: categoryBreakdown,
-	}, nil
-}
 }

@@ -6,7 +6,6 @@ import (
 	"expense_tracker/infrastructure/auth"
 	"expense_tracker/usecases"
 	"net/http"
-	"strconv"
 	"strings"
 	"time"
 )
@@ -107,61 +106,4 @@ func (h *ReportHandler) GetWeeklyReport(w http.ResponseWriter, r *http.Request) 
 	}
 
 	utils.WriteJSON(w, http.StatusOK, utils.Envelope{"data": weeklyReport})
-}
-
-func (h *ReportHandler) GetMonthlyReport(w http.ResponseWriter, r *http.Request) {
-	authHeader := r.Header.Get("Authorization")
-	if authHeader == "" {
-		utils.WriteJSON(w, http.StatusUnauthorized, utils.Envelope{"error": "missing authorization header"})
-		return
-	}
-
-	tokenStr := strings.TrimPrefix(authHeader, "Bearer ")
-	userID, err := h.jwt.Validate(tokenStr)
-	if err != nil {
-		utils.WriteJSON(w, http.StatusUnauthorized, utils.Envelope{"error": "invalid token"})
-		return
-	}
-
-	query := r.URL.Query()
-	yearStr := query.Get("year")
-	monthStr := query.Get("month")
-	if monthStr == "" {
-		monthStr = query.Get("monthly") // fallback just in case
-	}
-
-	if yearStr == "" || monthStr == "" {
-		utils.WriteJSON(w, http.StatusBadRequest, utils.Envelope{"error": "year and month are required"})
-		return
-	}
-
-	yearInt, err := strconv.Atoi(yearStr)
-	if err != nil {
-		utils.WriteJSON(w, http.StatusBadRequest, utils.Envelope{"error": "invalid year"})
-		return
-	}
-	
-	monthInt, err := strconv.Atoi(monthStr)
-	if err != nil || monthInt < 1 || monthInt > 12 {
-		utils.WriteJSON(w, http.StatusBadRequest, utils.Envelope{"error": "invalid month"})
-		return
-	}
-
-	// Calculate start and end date for the month
-	startDate := time.Date(yearInt, time.Month(monthInt), 1, 0, 0, 0, 0, time.UTC)
-	// Add 1 month, subtract 1 day to get the last day of the month
-	endDate := startDate.AddDate(0, 1, -1)
-
-	monthlyReport, err := h.reportUC.GetMonthlyReport(r.Context(), userID, startDate, endDate)
-	if err != nil {
-		if errors.Is(err, usecases.ErrInvalidDateRange) {
-			utils.WriteJSON(w, http.StatusBadRequest, utils.Envelope{"error": err.Error()})
-			return
-		}
-		utils.WriteJSON(w, http.StatusInternalServerError, utils.Envelope{"error": "internal server error"})
-		return
-	}
-
-	utils.WriteJSON(w, http.StatusOK, utils.Envelope{"data": monthlyReport})
-}
 }
