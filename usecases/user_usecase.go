@@ -4,8 +4,6 @@ import (
 	"context"
 	"expense_tracker/domain"
 	"expense_tracker/repository"
-
-	"github.com/google/uuid"
 )
 
 type UserUsecase interface {
