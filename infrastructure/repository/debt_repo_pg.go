@@ -4,6 +4,7 @@ import (
 	"context"
 	"database/sql"
 	"expense_tracker/domain"
+	pkgrepo "expense_tracker/repository"
 )
 
 type DebtRepositoryPG struct {
@@ -86,25 +87,49 @@ func (r *DebtRepositoryPG) GetByID(ctx context.Context, id string) (*domain.Debt
 	return scanDebt(row)
 }
 
-func (r *DebtRepositoryPG) ListByUser(ctx context.Context, userID string) ([]*domain.Debt, error) {
+func (r *DebtRepositoryPG) ListByUser(ctx context.Context, userID string, options pkgrepo.ListOptions) ([]*domain.Debt, int, error) {
+	countQuery := `SELECT COUNT(*) FROM debts WHERE user_id = $1`
+	var total int
+	if err := r.DB.QueryRowContext(ctx, countQuery, userID).Scan(&total); err != nil {
+		return nil, 0, err
+	}
+
 	query := `
 		SELECT id, user_id, type, peer_name, amount, due_date,
 			reminder_enabled, remind_at, sent_at, status, note, created_at
 		FROM debts
 		WHERE user_id = $1
 		ORDER BY due_date ASC
+		LIMIT $2 OFFSET $3
 	`
 
-	rows, err := r.DB.QueryContext(ctx, query, userID)
+	rows, err := r.DB.QueryContext(ctx, query, userID, options.Limit, options.Offset)
 	if err != nil {
-		return nil, err
+		return nil, 0, err
 	}
 	defer rows.Close()
 
-	return scanDebts(rows)
+	items, err := scanDebts(rows)
+	if err != nil {
+		return nil, 0, err
+	}
+	return items, total, nil
 }
 
-func (r *DebtRepositoryPG) ListUpcoming(ctx context.Context, userID string, days int) ([]*domain.Debt, error) {
+func (r *DebtRepositoryPG) ListUpcoming(ctx context.Context, userID string, days int, options pkgrepo.ListOptions) ([]*domain.Debt, int, error) {
+	countQuery := `
+		SELECT COUNT(*)
+		FROM debts
+		WHERE user_id = $1
+			AND status = $2
+			AND due_date >= CURRENT_DATE
+			AND due_date <= CURRENT_DATE + ($3 * INTERVAL '1 day')
+	`
+	var total int
+	if err := r.DB.QueryRowContext(ctx, countQuery, userID, domain.DebtStatusPending, days).Scan(&total); err != nil {
+		return nil, 0, err
+	}
+
 	query := `
 		SELECT id, user_id, type, peer_name, amount, due_date,
 			reminder_enabled, remind_at, sent_at, status, note, created_at
@@ -114,15 +139,20 @@ func (r *DebtRepositoryPG) ListUpcoming(ctx context.Context, userID string, days
 			AND due_date >= CURRENT_DATE
 			AND due_date <= CURRENT_DATE + ($3 * INTERVAL '1 day')
 		ORDER BY due_date ASC
+		LIMIT $4 OFFSET $5
 	`
 
-	rows, err := r.DB.QueryContext(ctx, query, userID, domain.DebtStatusPending, days)
+	rows, err := r.DB.QueryContext(ctx, query, userID, domain.DebtStatusPending, days, options.Limit, options.Offset)
 	if err != nil {
-		return nil, err
+		return nil, 0, err
 	}
 	defer rows.Close()
 
-	return scanDebts(rows)
+	items, err := scanDebts(rows)
+	if err != nil {
+		return nil, 0, err
+	}
+	return items, total, nil
 }
 
 func (r *DebtRepositoryPG) MarkPaid(ctx context.Context, id string) (*domain.Debt, error) {

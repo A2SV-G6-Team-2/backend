@@ -3,8 +3,8 @@ package http
 import (
 	"encoding/json"
 	"net/http"
-	"strings"
 
+	"expense_tracker/delivery/apiresponse"
 	"expense_tracker/infrastructure/auth"
 	"expense_tracker/usecases"
 )
@@ -19,58 +19,38 @@ func NewUserHandler(uc usecases.UserUsecase, jwt *auth.JWTService) *UserHandler 
 }
 
 func (h *UserHandler) GetProfile(w http.ResponseWriter, r *http.Request) {
-	authHeader := r.Header.Get("Authorization")
-	if authHeader == "" {
-		http.Error(w, "missing authorization header", http.StatusUnauthorized)
-		return
-	}
-
-	tokenStr := strings.TrimPrefix(authHeader, "Bearer ")
-
-	userID, err := h.jwt.Validate(tokenStr)
+	userID, err := authenticateRequest(r, h.jwt)
 	if err != nil {
-		http.Error(w, "invalid token", http.StatusUnauthorized)
+		writeUnauthorized(w, err)
 		return
 	}
 
 	user, err := h.userUC.GetByID(r.Context(), userID)
 	if err != nil {
-		http.Error(w, err.Error(), http.StatusNotFound)
+		apiresponse.Error(w, http.StatusNotFound, "User not found", []string{"user not found"})
 		return
 	}
 
-	json.NewEncoder(w).Encode(user)
+	apiresponse.Success(w, http.StatusOK, "User fetched successfully", user, nil)
 }
 
 func (h *UserHandler) UpdateProfile(w http.ResponseWriter, r *http.Request) {
-	authHeader := r.Header.Get("Authorization")
-	if authHeader == "" {
-		http.Error(w, "missing authorization header", http.StatusUnauthorized)
-		return
-	}
-
-	tokenStr := strings.TrimPrefix(authHeader, "Bearer ")
-
-	userID, err := h.jwt.Validate(tokenStr)
+	userID, err := authenticateRequest(r, h.jwt)
 	if err != nil {
-		http.Error(w, "invalid token", http.StatusUnauthorized)
+		writeUnauthorized(w, err)
 		return
 	}
 
 	var input usecases.UpdateUserInput
 	if err := json.NewDecoder(r.Body).Decode(&input); err != nil {
-		http.Error(w, "invalid payload", http.StatusBadRequest)
+		apiresponse.Error(w, http.StatusBadRequest, "Validation failed", []string{"invalid request body"})
 		return
 	}
 
 	if err := h.userUC.Update(r.Context(), userID, input); err != nil {
-		http.Error(w, err.Error(), http.StatusBadRequest)
+		apiresponse.Error(w, http.StatusBadRequest, "Profile update failed", []string{"unable to update profile"})
 		return
 	}
 
-	w.Header().Set("Content-Type", "application/json")
-	w.WriteHeader(http.StatusOK)
-	json.NewEncoder(w).Encode(map[string]string{
-		"message": "Profile updated successfully",
-	})
+	apiresponse.Success(w, http.StatusOK, "Profile updated successfully", nil, nil)
 }

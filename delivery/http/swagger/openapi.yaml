@@ -2,10 +2,19 @@ openapi: 3.0.3
 info:
   title: Personal Expense Tracker API
   description: |
-    Student Personal Expense Tracker – Complete API documentation.
-    
-    **Authentication:** Most endpoints require JWT. Obtain token via `POST /auth/login` and use `Authorization: Bearer <token>` header.
-    
+    Personal Expense Tracker backend API.
+
+    **Authentication flow**
+    - Get `access_token` and `refresh_token` from `POST /auth/login`
+    - Send `Authorization: Bearer <access_token>` to protected endpoints
+    - Rotate tokens with `POST /auth/refresh`
+    - Revoke the current refresh token with `POST /auth/logout`
+
+    **Response format**
+    - All endpoints return the same top-level envelope: `success`, `message`, `data`, `errors`, and `meta`
+    - Validation and business errors always use `errors` as an array of strings
+    - Paginated list endpoints return `data.items` and `meta.pagination`
+
     ## Features
     - User authentication and profile management
     - Expense tracking with categories
@@ -15,14 +24,12 @@ info:
   version: 1.0.0
 
 servers:
-  - url: http://159.89.165.171:8080
-    description: Production server
   - url: http://localhost:8080
     description: Local development server
 
 tags:
   - name: Authentication
-    description: User registration and login (public endpoints)
+    description: User registration, login, token refresh, and logout (public endpoints)
   - name: User
     description: User profile management (JWT required)
   - name: Expenses
@@ -56,14 +63,14 @@ paths:
             example:
               name: "John Doe"
               email: "john@university.edu"
-              password: "secure123"
+              password: "Secure123!"
       responses:
         '201':
           description: User successfully registered
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/AuthResponse'
+                $ref: '#/components/schemas/UserSuccessResponse'
         '400':
           description: Invalid input
           content:
@@ -77,14 +84,19 @@ paths:
               schema:
                 $ref: '#/components/schemas/Error'
               example:
-                error: "email already used"
+                success: false
+                message: "Registration failed"
+                data: null
+                errors:
+                  - "email already used"
+                meta: null
 
   /auth/login:
     post:
       tags:
         - Authentication
       summary: Login user
-      description: Authenticate user and get JWT token
+      description: Authenticate user and get an access token plus refresh token
       operationId: loginUser
       requestBody:
         required: true
@@ -94,14 +106,14 @@ paths:
               $ref: '#/components/schemas/LoginInput'
             example:
               email: "john@university.edu"
-              password: "secure123"
+              password: "Secure123!"
       responses:
         '200':
           description: Successfully authenticated
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/AuthResponse'
+                $ref: '#/components/schemas/AuthSuccessResponse'
         '401':
           description: Invalid credentials
           content:
@@ -109,7 +121,82 @@ paths:
               schema:
                 $ref: '#/components/schemas/Error'
               example:
-                error: "invalid credentials"
+                success: false
+                message: "Authentication failed"
+                data: null
+                errors:
+                  - "invalid credentials"
+                meta: null
+
+  /auth/refresh:
+    post:
+      tags:
+        - Authentication
+      summary: Refresh tokens
+      description: Exchange a valid refresh token for a new access token and refresh token
+      operationId: refreshTokens
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/RefreshInput'
+            example:
+              refresh_token: "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.refresh.signature"
+      responses:
+        '200':
+          description: Tokens refreshed successfully
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AuthSuccessResponse'
+        '400':
+          description: Validation error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '401':
+          description: Invalid refresh token
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+
+  /auth/logout:
+    post:
+      tags:
+        - Authentication
+      summary: Logout user
+      description: Revoke the current refresh token so it can no longer be used to mint new access tokens
+      operationId: logoutUser
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/RefreshInput'
+            example:
+              refresh_token: "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.refresh.signature"
+      responses:
+        '200':
+          description: Logout completed successfully
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/EmptySuccessResponse'
+        '400':
+          description: Validation error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '401':
+          description: Invalid refresh token
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
 
   # ========================================
   # USER ENDPOINTS
@@ -128,7 +215,7 @@ paths:
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/User'
+                $ref: '#/components/schemas/UserSuccessResponse'
         '401':
           description: Missing or invalid authorization
           content:
@@ -177,11 +264,7 @@ paths:
           content:
             application/json:
               schema:
-                type: object
-                properties:
-                  message:
-                    type: string
-                    example: "Profile updated successfully"
+                $ref: '#/components/schemas/EmptySuccessResponse'
         '400':
           description: Invalid input
           content:
@@ -231,17 +314,21 @@ paths:
           schema:
             type: string
             format: uuid
+        - $ref: '#/components/parameters/Page'
+        - $ref: '#/components/parameters/PageSize'
       responses:
         '200':
           description: List of expenses
           content:
             application/json:
               schema:
-                type: array
-                items:
-                  $ref: '#/components/schemas/Expense'
+                $ref: '#/components/schemas/ExpenseListResponse'
         '401':
           description: Missing or invalid authorization
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
     post:
       tags:
         - Expenses
@@ -261,11 +348,19 @@ paths:
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/Expense'
+                $ref: '#/components/schemas/ExpenseSuccessResponse'
         '400':
           description: Validation error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
         '401':
           description: Missing or invalid authorization
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
 
   /expenses/{id}:
     get:
@@ -287,9 +382,25 @@ paths:
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/Expense'
+                $ref: '#/components/schemas/ExpenseSuccessResponse'
+        '400':
+          description: Invalid expense ID
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '401':
+          description: Missing or invalid authorization
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
         '404':
           description: Not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
     put:
       tags:
         - Expenses
@@ -314,9 +425,25 @@ paths:
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/Expense'
+                $ref: '#/components/schemas/ExpenseSuccessResponse'
+        '400':
+          description: Validation error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '401':
+          description: Missing or invalid authorization
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
         '404':
           description: Not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
     delete:
       tags:
         - Expenses
@@ -331,10 +458,30 @@ paths:
             type: string
             format: uuid
       responses:
-        '204':
+        '200':
           description: Deleted
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/EmptySuccessResponse'
+        '400':
+          description: Validation error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '401':
+          description: Missing or invalid authorization
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
         '404':
           description: Not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
 
   # ========================================
   # CATEGORY ENDPOINTS (Team 2)
@@ -347,15 +494,28 @@ paths:
       description: List global and user-defined categories for the authenticated user.
       security:
         - BearerAuth: []
+      parameters:
+        - $ref: '#/components/parameters/Page'
+        - $ref: '#/components/parameters/PageSize'
       responses:
         '200':
           description: List of categories
           content:
             application/json:
               schema:
-                type: array
-                items:
-                  $ref: '#/components/schemas/Category'
+                $ref: '#/components/schemas/CategoryListResponse'
+        '400':
+          description: Invalid pagination
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '401':
+          description: Missing or invalid authorization
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
     post:
       tags:
         - Categories
@@ -375,9 +535,13 @@ paths:
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/Category'
+                $ref: '#/components/schemas/CategorySuccessResponse'
         '400':
           description: Validation error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
 
   /categories/{id}:
     get:
@@ -399,9 +563,25 @@ paths:
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/Category'
+                $ref: '#/components/schemas/CategorySuccessResponse'
+        '400':
+          description: Invalid category ID
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '401':
+          description: Missing or invalid authorization
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
         '404':
           description: Not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
     put:
       tags:
         - Categories
@@ -426,9 +606,25 @@ paths:
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/Category'
+                $ref: '#/components/schemas/CategorySuccessResponse'
+        '400':
+          description: Validation error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '401':
+          description: Missing or invalid authorization
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
         '404':
           description: Not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
     delete:
       tags:
         - Categories
@@ -443,10 +639,30 @@ paths:
             type: string
             format: uuid
       responses:
-        '204':
+        '200':
           description: Deleted
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/EmptySuccessResponse'
+        '400':
+          description: Validation error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '401':
+          description: Missing or invalid authorization
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
         '404':
           description: Not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
 
   # ========================================
   # DEBT ENDPOINTS
@@ -459,17 +675,28 @@ paths:
       description: Get all debts for the authenticated user
       security:
         - BearerAuth: []
+      parameters:
+        - $ref: '#/components/parameters/Page'
+        - $ref: '#/components/parameters/PageSize'
       responses:
         '200':
           description: List of debts retrieved successfully
           content:
             application/json:
               schema:
-                type: array
-                items:
-                  $ref: '#/components/schemas/Debt'
+                $ref: '#/components/schemas/DebtListResponse'
+        '400':
+          description: Invalid pagination
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
         '401':
           description: Missing or invalid authorization
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
     post:
       tags:
         - Debts
@@ -507,7 +734,7 @@ paths:
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/Debt'
+                $ref: '#/components/schemas/DebtSuccessResponse'
         '400':
           description: Validation error
           content:
@@ -535,15 +762,15 @@ paths:
             default: 7
             minimum: 1
             example: 7
+        - $ref: '#/components/parameters/Page'
+        - $ref: '#/components/parameters/PageSize'
       responses:
         '200':
           description: List of upcoming debts
           content:
             application/json:
               schema:
-                type: array
-                items:
-                  $ref: '#/components/schemas/Debt'
+                $ref: '#/components/schemas/DebtListResponse'
         '400':
           description: Invalid days parameter
           content:
@@ -554,41 +781,6 @@ paths:
           description: Missing or invalid authorization
 
   /debts/{id}:
-    get:
-      tags:
-        - Debts
-      summary: Get debt by ID
-      description: Get a specific debt by its ID
-      security:
-        - BearerAuth: []
-      parameters:
-        - name: id
-          in: path
-          required: true
-          schema:
-            type: string
-            format: uuid
-          example: "123e4567-e89b-12d3-a456-426614174000"
-      responses:
-        '200':
-          description: Debt retrieved successfully
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/Debt'
-        '401':
-          description: Missing or invalid authorization
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/Error'
-        '404':
-          description: Debt not found
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/Error'
-
     put:
       tags:
         - Debts
@@ -618,7 +810,7 @@ paths:
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/Debt'
+                $ref: '#/components/schemas/DebtSuccessResponse'
         '400':
           description: Validation error
           content:
@@ -659,7 +851,7 @@ paths:
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/Debt'
+                $ref: '#/components/schemas/DebtSuccessResponse'
         '400':
           description: Bad request (e.g., debt already paid)
           content:
@@ -713,7 +905,7 @@ paths:
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/WeeklyReport'
+                $ref: '#/components/schemas/WeeklyReportSuccessResponse'
         '400':
           description: Invalid date range
           content:
@@ -723,13 +915,100 @@ paths:
               examples:
                 missing_params:
                   value:
-                    error: "start and end are required"
+                    success: false
+                    message: "Validation failed"
+                    data: null
+                    errors:
+                      - "start and end are required"
+                    meta: null
                 invalid_date:
                   value:
-                    error: "invalid start date"
+                    success: false
+                    message: "Validation failed"
+                    data: null
+                    errors:
+                      - "start must use YYYY-MM-DD"
+                    meta: null
                 invalid_range:
                   value:
-                    error: "end date must be on or after start date"
+                    success: false
+                    message: "Validation failed"
+                    data: null
+                    errors:
+                      - "end date must be on or after start date"
+                    meta: null
+        '401':
+          description: Missing or invalid authorization
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+
+  /reports/daily:
+    get:
+      tags:
+        - Reports
+      summary: Get daily spending report
+      description: Get expense and debt summary for a single date
+      security:
+        - BearerAuth: []
+      parameters:
+        - name: date
+          in: query
+          description: Date (YYYY-MM-DD)
+          required: true
+          schema:
+            type: string
+            format: date
+      responses:
+        '200':
+          description: Daily report generated successfully
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/DailyReportSuccessResponse'
+        '400':
+          description: Invalid date
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '401':
+          description: Missing or invalid authorization
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+
+  /reports/monthly:
+    get:
+      tags:
+        - Reports
+      summary: Get monthly spending report
+      description: Get expense and debt summary for a given month
+      security:
+        - BearerAuth: []
+      parameters:
+        - name: month
+          in: query
+          description: Month (YYYY-MM)
+          required: true
+          schema:
+            type: string
+            example: "2024-01"
+      responses:
+        '200':
+          description: Monthly report generated successfully
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/MonthlyReportSuccessResponse'
+        '400':
+          description: Invalid month
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
         '401':
           description: Missing or invalid authorization
           content:
@@ -779,6 +1058,27 @@ paths:
                 type: string
 
 components:
+  parameters:
+    Page:
+      name: page
+      in: query
+      description: Page number, starting from 1
+      required: false
+      schema:
+        type: integer
+        default: 1
+        minimum: 1
+    PageSize:
+      name: page_size
+      in: query
+      description: Number of items per page
+      required: false
+      schema:
+        type: integer
+        default: 10
+        minimum: 1
+        maximum: 100
+
   securitySchemes:
     BearerAuth:
       type: http
@@ -787,10 +1087,112 @@ components:
       description: Enter your JWT token in the format "Bearer &lt;token&gt;"
 
   schemas:
+    APIResponseBase:
+      type: object
+      description: Standard response envelope returned by all HTTP endpoints
+      required:
+        - success
+        - message
+        - data
+        - errors
+        - meta
+      properties:
+        success:
+          type: boolean
+        message:
+          type: string
+        data:
+          nullable: true
+        errors:
+          type: array
+          items:
+            type: string
+          nullable: true
+        meta:
+          nullable: true
+
+    Error:
+      description: Standard error response
+      allOf:
+        - $ref: '#/components/schemas/APIResponseBase'
+        - type: object
+          properties:
+            success:
+              type: boolean
+              example: false
+            message:
+              type: string
+              example: "Validation failed"
+            data:
+              nullable: true
+              example: null
+            errors:
+              type: array
+              items:
+                type: string
+              example:
+                - "email is required"
+            meta:
+              nullable: true
+              example: null
+
+    Pagination:
+      type: object
+      description: Pagination metadata for list endpoints
+      properties:
+        page:
+          type: integer
+          example: 1
+        page_size:
+          type: integer
+          example: 10
+        total_items:
+          type: integer
+          example: 125
+        total_pages:
+          type: integer
+          example: 13
+        has_next:
+          type: boolean
+          example: true
+        has_previous:
+          type: boolean
+          example: false
+
+    Meta:
+      type: object
+      description: Optional metadata container
+      properties:
+        pagination:
+          $ref: '#/components/schemas/Pagination'
+
+    EmptySuccessResponse:
+      description: Success response without a data payload
+      allOf:
+        - $ref: '#/components/schemas/APIResponseBase'
+        - type: object
+          properties:
+            success:
+              type: boolean
+              example: true
+            message:
+              type: string
+              example: "Operation completed successfully"
+            data:
+              nullable: true
+              example: null
+            errors:
+              nullable: true
+              example: null
+            meta:
+              nullable: true
+              example: null
+
     # ========================================
     # USER SCHEMAS
     # ========================================
     User:
+      description: User profile payload
       type: object
       properties:
         id:
@@ -837,6 +1239,7 @@ components:
     # ========================================
     RegisterInput:
       type: object
+      description: Registration payload
       required:
         - name
         - email
@@ -852,11 +1255,14 @@ components:
         password:
           type: string
           format: password
-          minLength: 6
-          example: "secure123"
+          minLength: 8
+          pattern: '^(?=.*[a-z])(?=.*[A-Z])(?=.*\d)(?=.*[^A-Za-z0-9]).+$'
+          example: "Secure123!"
+          description: Must be at least 8 characters and include one uppercase letter, one lowercase letter, one number, and one special character
 
     LoginInput:
       type: object
+      description: Login payload
       required:
         - email
         - password
@@ -868,21 +1274,76 @@ components:
         password:
           type: string
           format: password
-          example: "secure123"
+          example: "Secure123!"
+
+    RefreshInput:
+      type: object
+      description: Refresh or logout request payload
+      required:
+        - refresh_token
+      properties:
+        refresh_token:
+          type: string
+          example: "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.refresh.signature"
 
     AuthResponse:
       type: object
+      description: Token pair plus the authenticated user
       properties:
-        token:
+        access_token:
           type: string
-          example: "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJ1c2VyX2lkIjoiMTIzZTQ1NjctZTg5Yi0xMmQzLWE0NTYtNDI2NjE0MTc0MDAwIiwiZXhwIjoxNzA1MjgwMDAwfQ.signature"
+          example: "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.access.signature"
+        refresh_token:
+          type: string
+          example: "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.refresh.signature"
         user:
           $ref: '#/components/schemas/User'
+
+    UserSuccessResponse:
+      allOf:
+        - $ref: '#/components/schemas/APIResponseBase'
+        - type: object
+          properties:
+            success:
+              type: boolean
+              example: true
+            message:
+              type: string
+              example: "User fetched successfully"
+            data:
+              $ref: '#/components/schemas/User'
+            errors:
+              nullable: true
+              example: null
+            meta:
+              nullable: true
+              example: null
+
+    AuthSuccessResponse:
+      allOf:
+        - $ref: '#/components/schemas/APIResponseBase'
+        - type: object
+          properties:
+            success:
+              type: boolean
+              example: true
+            message:
+              type: string
+              example: "User logged in successfully"
+            data:
+              $ref: '#/components/schemas/AuthResponse'
+            errors:
+              nullable: true
+              example: null
+            meta:
+              nullable: true
+              example: null
 
     # ========================================
     # EXPENSE SCHEMAS (Team 2)
     # ========================================
     Expense:
+      description: Expense resource
       type: object
       properties:
         id:
@@ -924,6 +1385,7 @@ components:
 
     CreateExpenseRequest:
       type: object
+      description: Expense creation payload
       required:
         - amount
         - expense_date
@@ -958,6 +1420,7 @@ components:
 
     UpdateExpenseRequest:
       type: object
+      description: Expense update payload
       properties:
         amount:
           type: number
@@ -983,10 +1446,59 @@ components:
           type: string
           format: date
 
+    ExpenseListData:
+      type: object
+      description: Paginated expense items
+      properties:
+        items:
+          type: array
+          items:
+            $ref: '#/components/schemas/Expense'
+
+    ExpenseSuccessResponse:
+      allOf:
+        - $ref: '#/components/schemas/APIResponseBase'
+        - type: object
+          properties:
+            success:
+              type: boolean
+              example: true
+            message:
+              type: string
+              example: "Expense retrieved successfully"
+            data:
+              $ref: '#/components/schemas/Expense'
+            errors:
+              nullable: true
+              example: null
+            meta:
+              nullable: true
+              example: null
+
+    ExpenseListResponse:
+      allOf:
+        - $ref: '#/components/schemas/APIResponseBase'
+        - type: object
+          properties:
+            success:
+              type: boolean
+              example: true
+            message:
+              type: string
+              example: "Expenses retrieved successfully"
+            data:
+              $ref: '#/components/schemas/ExpenseListData'
+            errors:
+              nullable: true
+              example: null
+            meta:
+              $ref: '#/components/schemas/Meta'
+
     # ========================================
     # CATEGORY SCHEMAS (Team 2)
     # ========================================
     Category:
+      description: Category resource
       type: object
       properties:
         id:
@@ -1001,6 +1513,7 @@ components:
 
     CreateCategoryRequest:
       type: object
+      description: Category creation payload
       required:
         - name
       properties:
@@ -1013,15 +1526,65 @@ components:
 
     UpdateCategoryRequest:
       type: object
+      description: Category update payload
       properties:
         name:
           type: string
+
+    CategoryListData:
+      type: object
+      description: Paginated category items
+      properties:
+        items:
+          type: array
+          items:
+            $ref: '#/components/schemas/Category'
+
+    CategorySuccessResponse:
+      allOf:
+        - $ref: '#/components/schemas/APIResponseBase'
+        - type: object
+          properties:
+            success:
+              type: boolean
+              example: true
+            message:
+              type: string
+              example: "Category retrieved successfully"
+            data:
+              $ref: '#/components/schemas/Category'
+            errors:
+              nullable: true
+              example: null
+            meta:
+              nullable: true
+              example: null
+
+    CategoryListResponse:
+      allOf:
+        - $ref: '#/components/schemas/APIResponseBase'
+        - type: object
+          properties:
+            success:
+              type: boolean
+              example: true
+            message:
+              type: string
+              example: "Categories retrieved successfully"
+            data:
+              $ref: '#/components/schemas/CategoryListData'
+            errors:
+              nullable: true
+              example: null
+            meta:
+              $ref: '#/components/schemas/Meta'
 
     # ========================================
     # DEBT SCHEMAS
     # ========================================
     Debt:
       type: object
+      description: Debt resource
       properties:
         id:
           type: string
@@ -1064,6 +1627,7 @@ components:
 
     CreateDebtInput:
       type: object
+      description: Debt creation payload
       required:
         - type
         - peer_name
@@ -1096,6 +1660,7 @@ components:
 
     UpdateDebtInput:
       type: object
+      description: Debt update payload
       properties:
         type:
           type: string
@@ -1121,11 +1686,60 @@ components:
           example: "Updated note"
       minProperties: 1
 
+    DebtListData:
+      type: object
+      description: Paginated debt items
+      properties:
+        items:
+          type: array
+          items:
+            $ref: '#/components/schemas/Debt'
+
+    DebtSuccessResponse:
+      allOf:
+        - $ref: '#/components/schemas/APIResponseBase'
+        - type: object
+          properties:
+            success:
+              type: boolean
+              example: true
+            message:
+              type: string
+              example: "Debt retrieved successfully"
+            data:
+              $ref: '#/components/schemas/Debt'
+            errors:
+              nullable: true
+              example: null
+            meta:
+              nullable: true
+              example: null
+
+    DebtListResponse:
+      allOf:
+        - $ref: '#/components/schemas/APIResponseBase'
+        - type: object
+          properties:
+            success:
+              type: boolean
+              example: true
+            message:
+              type: string
+              example: "Debts retrieved successfully"
+            data:
+              $ref: '#/components/schemas/DebtListData'
+            errors:
+              nullable: true
+              example: null
+            meta:
+              $ref: '#/components/schemas/Meta'
+
     # ========================================
     # REPORT SCHEMAS
     # ========================================
     WeeklyReport:
       type: object
+      description: Weekly report payload
       properties:
         start_date:
           type: string
@@ -1160,12 +1774,115 @@ components:
                 format: float
                 example: 120.50
 
-    # ========================================
-    # ERROR SCHEMA
-    # ========================================
-    Error:
+    DailyReport:
       type: object
+      description: Daily report payload. Field names use hyphenated keys to match the current API response.
       properties:
-        error:
+        date:
           type: string
-          example: "Invalid credentials"
+          format: date
+          example: "2024-01-01"
+        total-expense:
+          type: number
+          format: float
+          example: 120.50
+        total-lent:
+          type: number
+          format: float
+          example: 50
+        total-borrowed:
+          type: number
+          format: float
+          example: 25
+
+    MonthlyReport:
+      type: object
+      description: Monthly report payload
+      properties:
+        month:
+          type: string
+          example: "2024-01"
+        total_expense:
+          type: number
+          format: float
+          example: 250.75
+        total_lent:
+          type: number
+          format: float
+          example: 50
+        total_borrowed:
+          type: number
+          format: float
+          example: 0
+        category_breakdown:
+          type: array
+          items:
+            type: object
+            properties:
+              category_name:
+                type: string
+                example: "Food"
+              total:
+                type: number
+                format: float
+                example: 120.50
+
+    WeeklyReportSuccessResponse:
+      allOf:
+        - $ref: '#/components/schemas/APIResponseBase'
+        - type: object
+          properties:
+            success:
+              type: boolean
+              example: true
+            message:
+              type: string
+              example: "Weekly report retrieved successfully"
+            data:
+              $ref: '#/components/schemas/WeeklyReport'
+            errors:
+              nullable: true
+              example: null
+            meta:
+              nullable: true
+              example: null
+
+    DailyReportSuccessResponse:
+      allOf:
+        - $ref: '#/components/schemas/APIResponseBase'
+        - type: object
+          properties:
+            success:
+              type: boolean
+              example: true
+            message:
+              type: string
+              example: "Daily report retrieved successfully"
+            data:
+              $ref: '#/components/schemas/DailyReport'
+            errors:
+              nullable: true
+              example: null
+            meta:
+              nullable: true
+              example: null
+
+    MonthlyReportSuccessResponse:
+      allOf:
+        - $ref: '#/components/schemas/APIResponseBase'
+        - type: object
+          properties:
+            success:
+              type: boolean
+              example: true
+            message:
+              type: string
+              example: "Monthly report retrieved successfully"
+            data:
+              $ref: '#/components/schemas/MonthlyReport'
+            errors:
+              nullable: true
+              example: null
+            meta:
+              nullable: true
+              example: null

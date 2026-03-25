@@ -5,6 +5,7 @@ import (
 	"net/http"
 	"strings"
 
+	"expense_tracker/delivery/apiresponse"
 	"expense_tracker/infrastructure/auth"
 )
 
@@ -20,17 +21,17 @@ func JWTAuthMiddleware(jwtSvc *auth.JWTService, next http.Handler) http.Handler 
 		if strings.HasPrefix(path, "/expenses") || strings.HasPrefix(path, "/categories") {
 			authHeader := r.Header.Get("Authorization")
 			if authHeader == "" {
-				http.Error(w, "missing authorization header", http.StatusUnauthorized)
+				apiresponse.Error(w, http.StatusUnauthorized, "Unauthorized", []string{"missing authorization header"})
 				return
 			}
 			tokenStr := strings.TrimPrefix(authHeader, "Bearer ")
-			if tokenStr == "" {
-				http.Error(w, "missing bearer token", http.StatusUnauthorized)
+			if tokenStr == "" || tokenStr == authHeader {
+				apiresponse.Error(w, http.StatusUnauthorized, "Unauthorized", []string{"invalid authorization header"})
 				return
 			}
 			userID, err := jwtSvc.Validate(tokenStr)
 			if err != nil {
-				http.Error(w, "invalid or expired token", http.StatusUnauthorized)
+				apiresponse.Error(w, http.StatusUnauthorized, "Unauthorized", []string{"invalid or expired token"})
 				return
 			}
 			ctx := context.WithValue(r.Context(), UserIDContextKey, userID.String())

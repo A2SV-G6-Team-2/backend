@@ -109,35 +109,50 @@ func (r *ExpenseRepoPG) GetByID(ctx context.Context, id, userID string) (*domain
 	return &e, nil
 }
 
-func (r *ExpenseRepoPG) List(ctx context.Context, filter domain.ExpenseFilter) ([]*domain.Expense, error) {
-	query := `SELECT id, user_id, amount, category_id, is_recurring, recurrence_type,
-		next_due_date, reminder_enabled, reminder_sent_at, note, expense_date, created_at
-		FROM expenses WHERE user_id = $1`
+func (r *ExpenseRepoPG) List(ctx context.Context, filter domain.ExpenseFilter) ([]*domain.Expense, int, error) {
+	baseWhere := ` FROM expenses WHERE user_id = $1`
 	args := []interface{}{filter.UserID}
 	pos := 2
 	if filter.CategoryID != nil {
-		query += ` AND category_id = $` + strconv.Itoa(pos)
+		baseWhere += ` AND category_id = $` + strconv.Itoa(pos)
 		args = append(args, *filter.CategoryID)
 		pos++
 	}
 	if filter.FromDate != nil {
-		query += ` AND expense_date >= $` + strconv.Itoa(pos)
+		baseWhere += ` AND expense_date >= $` + strconv.Itoa(pos)
 		args = append(args, filter.FromDate.Format("2006-01-02"))
 		pos++
 	}
 	if filter.ToDate != nil {
-		query += ` AND expense_date <= $` + strconv.Itoa(pos)
+		baseWhere += ` AND expense_date <= $` + strconv.Itoa(pos)
 		args = append(args, filter.ToDate.Format("2006-01-02"))
 		pos++
 	}
-	query += ` ORDER BY expense_date DESC, created_at DESC`
+
+	countQuery := `SELECT COUNT(*)` + baseWhere
+	var total int
+	if err := r.db.QueryRowContext(ctx, countQuery, args...).Scan(&total); err != nil {
+		return nil, 0, err
+	}
+
+	query := `SELECT id, user_id, amount, category_id, is_recurring, recurrence_type,
+		next_due_date, reminder_enabled, reminder_sent_at, note, expense_date, created_at` +
+		baseWhere +
+		` ORDER BY expense_date DESC, created_at DESC LIMIT $` + strconv.Itoa(pos) +
+		` OFFSET $` + strconv.Itoa(pos+1)
+
+	args = append(args, filter.Limit, filter.Offset)
 
 	rows, err := r.db.QueryContext(ctx, query, args...)
 	if err != nil {
-		return nil, err
+		return nil, 0, err
 	}
 	defer rows.Close()
-	return scanExpenses(rows)
+	items, err := scanExpenses(rows)
+	if err != nil {
+		return nil, 0, err
+	}
+	return items, total, nil
 }
 
 func (r *ExpenseRepoPG) Update(ctx context.Context, id, userID string, input domain.UpdateExpenseInput) (*domain.Expense, error) {
@@ -311,4 +326,3 @@ func nullStr(s string) interface{} {
 	}
 	return s
 }
-

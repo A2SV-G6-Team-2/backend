@@ -2,8 +2,10 @@ package http
 
 import (
 	"encoding/json"
+	"expense_tracker/delivery/apiresponse"
 	"expense_tracker/domain"
 	"expense_tracker/infrastructure/auth"
+	"expense_tracker/repository"
 	"expense_tracker/usecases"
 	"net/http"
 	"strconv"
@@ -48,13 +50,13 @@ func (h *DebtHandler) CreateDebt(w http.ResponseWriter, r *http.Request) {
 
 	var req createDebtRequest
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
-		writeError(w, http.StatusBadRequest, "invalid request body")
+		apiresponse.Error(w, http.StatusBadRequest, "Validation failed", []string{"invalid request body"})
 		return
 	}
 
 	dueDate, err := time.Parse("2006-01-02", req.DueDate)
 	if err != nil {
-		writeError(w, http.StatusBadRequest, "invalid due_date")
+		apiresponse.Error(w, http.StatusBadRequest, "Validation failed", []string{"due_date must use YYYY-MM-DD"})
 		return
 	}
 
@@ -70,11 +72,11 @@ func (h *DebtHandler) CreateDebt(w http.ResponseWriter, r *http.Request) {
 	}
 
 	if err := h.usecase.Create(r.Context(), debt); err != nil {
-		writeError(w, http.StatusBadRequest, err.Error())
+		apiresponse.Error(w, http.StatusBadRequest, "Debt creation failed", []string{err.Error()})
 		return
 	}
 
-	writeJSON(w, http.StatusCreated, debt)
+	apiresponse.Success(w, http.StatusCreated, "Debt created successfully", debt, nil)
 }
 
 func (h *DebtHandler) UpdateDebt(w http.ResponseWriter, r *http.Request) {
@@ -85,29 +87,29 @@ func (h *DebtHandler) UpdateDebt(w http.ResponseWriter, r *http.Request) {
 
 	debtID := extractDebtID(r.URL.Path)
 	if debtID == "" {
-		writeError(w, http.StatusBadRequest, "missing debt id")
+		apiresponse.Error(w, http.StatusBadRequest, "Validation failed", []string{"missing debt id"})
 		return
 	}
 
 	existingDebt, err := h.usecase.GetByID(r.Context(), debtID)
 	if err != nil {
-		writeError(w, http.StatusBadRequest, err.Error())
+		apiresponse.Error(w, http.StatusNotFound, "Debt not found", []string{"debt not found"})
 		return
 	}
 	if existingDebt.UserID != userID {
-		writeError(w, http.StatusForbidden, "forbidden")
+		apiresponse.Error(w, http.StatusForbidden, "Forbidden", []string{"forbidden"})
 		return
 	}
 
 	var req updateDebtRequest
 	if err = json.NewDecoder(r.Body).Decode(&req); err != nil {
-		writeError(w, http.StatusBadRequest, "invalid request body")
+		apiresponse.Error(w, http.StatusBadRequest, "Validation failed", []string{"invalid request body"})
 		return
 	}
 
 	dueDate, err := time.Parse("2006-01-02", req.DueDate)
 	if err != nil {
-		writeError(w, http.StatusBadRequest, "invalid due_date")
+		apiresponse.Error(w, http.StatusBadRequest, "Validation failed", []string{"due_date must use YYYY-MM-DD"})
 		return
 	}
 
@@ -122,11 +124,11 @@ func (h *DebtHandler) UpdateDebt(w http.ResponseWriter, r *http.Request) {
 	}
 
 	if err := h.usecase.Update(r.Context(), debt); err != nil {
-		writeError(w, http.StatusBadRequest, err.Error())
+		apiresponse.Error(w, http.StatusBadRequest, "Debt update failed", []string{err.Error()})
 		return
 	}
 
-	writeJSON(w, http.StatusOK, debt)
+	apiresponse.Success(w, http.StatusOK, "Debt updated successfully", debt, nil)
 }
 
 func (h *DebtHandler) MarkDebtPaid(w http.ResponseWriter, r *http.Request) {
@@ -137,27 +139,27 @@ func (h *DebtHandler) MarkDebtPaid(w http.ResponseWriter, r *http.Request) {
 
 	debtID := extractDebtID(r.URL.Path)
 	if debtID == "" {
-		writeError(w, http.StatusBadRequest, "missing debt id")
+		apiresponse.Error(w, http.StatusBadRequest, "Validation failed", []string{"missing debt id"})
 		return
 	}
 
 	existingDebt, err := h.usecase.GetByID(r.Context(), debtID)
 	if err != nil {
-		writeError(w, http.StatusBadRequest, err.Error())
+		apiresponse.Error(w, http.StatusNotFound, "Debt not found", []string{"debt not found"})
 		return
 	}
 	if existingDebt.UserID != userID {
-		writeError(w, http.StatusForbidden, "forbidden")
+		apiresponse.Error(w, http.StatusForbidden, "Forbidden", []string{"forbidden"})
 		return
 	}
 
 	debt, err := h.usecase.MarkPaid(r.Context(), debtID)
 	if err != nil {
-		writeError(w, http.StatusBadRequest, err.Error())
+		apiresponse.Error(w, http.StatusBadRequest, "Debt payment failed", []string{err.Error()})
 		return
 	}
 
-	writeJSON(w, http.StatusOK, debt)
+	apiresponse.Success(w, http.StatusOK, "Debt marked as paid successfully", debt, nil)
 }
 
 func (h *DebtHandler) ListDebts(w http.ResponseWriter, r *http.Request) {
@@ -166,13 +168,28 @@ func (h *DebtHandler) ListDebts(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	debts, err := h.usecase.ListByUser(r.Context(), userID)
+	pagination, err := apiresponse.ParsePagination(r)
 	if err != nil {
-		writeError(w, http.StatusBadRequest, err.Error())
+		apiresponse.Error(w, http.StatusBadRequest, "Validation failed", []string{err.Error()})
 		return
 	}
 
-	writeJSON(w, http.StatusOK, debts)
+	debts, total, err := h.usecase.ListByUser(r.Context(), userID, repository.ListOptions{
+		Limit:  pagination.PageSize,
+		Offset: pagination.Offset(),
+	})
+	if err != nil {
+		apiresponse.Error(w, http.StatusBadRequest, "Unable to retrieve debts", []string{err.Error()})
+		return
+	}
+
+	apiresponse.PaginatedSuccess(
+		w,
+		http.StatusOK,
+		"Debts retrieved successfully",
+		debts,
+		apiresponse.NewPaginationMeta(pagination.Page, pagination.PageSize, total),
+	)
 }
 
 func (h *DebtHandler) ListUpcomingDebts(w http.ResponseWriter, r *http.Request) {
@@ -186,19 +203,34 @@ func (h *DebtHandler) ListUpcomingDebts(w http.ResponseWriter, r *http.Request) 
 	if daysStr != "" {
 		parsed, err := parseInt(daysStr)
 		if err != nil {
-			writeError(w, http.StatusBadRequest, "invalid days")
+			apiresponse.Error(w, http.StatusBadRequest, "Validation failed", []string{"days must be a valid integer"})
 			return
 		}
 		days = parsed
 	}
 
-	debts, err := h.usecase.ListUpcoming(r.Context(), userID, days)
+	pagination, err := apiresponse.ParsePagination(r)
 	if err != nil {
-		writeError(w, http.StatusBadRequest, err.Error())
+		apiresponse.Error(w, http.StatusBadRequest, "Validation failed", []string{err.Error()})
 		return
 	}
 
-	writeJSON(w, http.StatusOK, debts)
+	debts, total, err := h.usecase.ListUpcoming(r.Context(), userID, days, repository.ListOptions{
+		Limit:  pagination.PageSize,
+		Offset: pagination.Offset(),
+	})
+	if err != nil {
+		apiresponse.Error(w, http.StatusBadRequest, "Unable to retrieve upcoming debts", []string{err.Error()})
+		return
+	}
+
+	apiresponse.PaginatedSuccess(
+		w,
+		http.StatusOK,
+		"Upcoming debts retrieved successfully",
+		debts,
+		apiresponse.NewPaginationMeta(pagination.Page, pagination.PageSize, total),
+	)
 }
 
 func extractDebtID(path string) string {
@@ -217,32 +249,10 @@ func parseInt(value string) (int, error) {
 	return strconv.Atoi(value)
 }
 
-func writeJSON(w http.ResponseWriter, status int, payload any) {
-	w.Header().Set("Content-Type", "application/json")
-	w.WriteHeader(status)
-	_ = json.NewEncoder(w).Encode(payload)
-}
-
-func writeError(w http.ResponseWriter, status int, message string) {
-	writeJSON(w, status, map[string]string{"error": message})
-}
-
 func (h *DebtHandler) authenticatedUserID(w http.ResponseWriter, r *http.Request) (string, bool) {
-	authHeader := r.Header.Get("Authorization")
-	if authHeader == "" {
-		writeError(w, http.StatusUnauthorized, "missing authorization header")
-		return "", false
-	}
-
-	tokenStr := strings.TrimPrefix(authHeader, "Bearer ")
-	if tokenStr == authHeader {
-		writeError(w, http.StatusUnauthorized, "invalid authorization header")
-		return "", false
-	}
-
-	userID, err := h.jwt.Validate(tokenStr)
+	userID, err := authenticateRequest(r, h.jwt)
 	if err != nil {
-		writeError(w, http.StatusUnauthorized, "invalid token")
+		writeUnauthorized(w, err)
 		return "", false
 	}
 

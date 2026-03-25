@@ -4,7 +4,9 @@ import (
 	"encoding/json"
 	"net/http"
 
+	"expense_tracker/delivery/apiresponse"
 	"expense_tracker/domain"
+	"expense_tracker/repository"
 	"expense_tracker/usecases"
 )
 
@@ -26,7 +28,7 @@ type CreateCategoryRequest struct {
 
 func (h *CategoryHandler) Create(w http.ResponseWriter, r *http.Request) {
 	if r.Method != http.MethodPost {
-		http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
+		apiresponse.Error(w, http.StatusMethodNotAllowed, "Method not allowed", []string{"method not allowed"})
 		return
 	}
 	userID := UserIDFromRequest(r)
@@ -38,17 +40,17 @@ func (h *CategoryHandler) Create(w http.ResponseWriter, r *http.Request) {
 
 	var req CreateCategoryRequest
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
-		http.Error(w, "invalid JSON", http.StatusBadRequest)
+		apiresponse.Error(w, http.StatusBadRequest, "Validation failed", []string{"invalid request body"})
 		return
 	}
 	if req.Name == "" {
-		http.Error(w, "name is required", http.StatusBadRequest)
+		apiresponse.Error(w, http.StatusBadRequest, "Validation failed", []string{"name is required"})
 		return
 	}
 	// If request specifies user_id, use it (for user-defined category)
 	if req.UserID != nil {
 		if *req.UserID != "" && !isValidUUID(*req.UserID) {
-			http.Error(w, "user_id must be a valid UUID", http.StatusBadRequest)
+			apiresponse.Error(w, http.StatusBadRequest, "Validation failed", []string{"user_id must be a valid UUID"})
 			return
 		}
 		createUserID = req.UserID
@@ -57,39 +59,50 @@ func (h *CategoryHandler) Create(w http.ResponseWriter, r *http.Request) {
 	input := domain.CreateCategoryInput{Name: req.Name, UserID: createUserID}
 	cat, err := h.categoryUC.Create(r.Context(), input)
 	if err != nil {
-		http.Error(w, err.Error(), http.StatusInternalServerError)
+		apiresponse.Error(w, http.StatusBadRequest, "Category creation failed", []string{"unable to create category"})
 		return
 	}
-	w.Header().Set("Content-Type", "application/json")
-	w.WriteHeader(http.StatusCreated)
-	_ = json.NewEncoder(w).Encode(cat)
+	apiresponse.Success(w, http.StatusCreated, "Category created successfully", cat, nil)
 }
 
 func (h *CategoryHandler) List(w http.ResponseWriter, r *http.Request) {
 	if r.Method != http.MethodGet {
-		http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
+		apiresponse.Error(w, http.StatusMethodNotAllowed, "Method not allowed", []string{"method not allowed"})
+		return
+	}
+	pagination, err := apiresponse.ParsePagination(r)
+	if err != nil {
+		apiresponse.Error(w, http.StatusBadRequest, "Validation failed", []string{err.Error()})
 		return
 	}
 	var userID *string
 	if uid := UserIDFromRequest(r); uid != "" {
 		userID = &uid
 	}
-	list, err := h.categoryUC.List(r.Context(), userID)
+	list, total, err := h.categoryUC.List(r.Context(), userID, repository.ListOptions{
+		Limit:  pagination.PageSize,
+		Offset: pagination.Offset(),
+	})
 	if err != nil {
-		http.Error(w, err.Error(), http.StatusInternalServerError)
+		apiresponse.InternalServerError(w)
 		return
 	}
-	w.Header().Set("Content-Type", "application/json")
-	_ = json.NewEncoder(w).Encode(list)
+	apiresponse.PaginatedSuccess(
+		w,
+		http.StatusOK,
+		"Categories retrieved successfully",
+		list,
+		apiresponse.NewPaginationMeta(pagination.Page, pagination.PageSize, total),
+	)
 }
 
 func (h *CategoryHandler) GetByID(w http.ResponseWriter, r *http.Request, id string) {
 	if r.Method != http.MethodGet {
-		http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
+		apiresponse.Error(w, http.StatusMethodNotAllowed, "Method not allowed", []string{"method not allowed"})
 		return
 	}
 	if !isValidUUID(id) {
-		http.Error(w, "invalid category id", http.StatusBadRequest)
+		apiresponse.Error(w, http.StatusBadRequest, "Validation failed", []string{"invalid category id"})
 		return
 	}
 	var userID *string
@@ -98,15 +111,14 @@ func (h *CategoryHandler) GetByID(w http.ResponseWriter, r *http.Request, id str
 	}
 	cat, err := h.categoryUC.GetByID(r.Context(), id, userID)
 	if err != nil {
-		http.Error(w, err.Error(), http.StatusInternalServerError)
+		apiresponse.InternalServerError(w)
 		return
 	}
 	if cat == nil {
-		http.Error(w, "not found", http.StatusNotFound)
+		apiresponse.Error(w, http.StatusNotFound, "Category not found", []string{"category not found"})
 		return
 	}
-	w.Header().Set("Content-Type", "application/json")
-	_ = json.NewEncoder(w).Encode(cat)
+	apiresponse.Success(w, http.StatusOK, "Category retrieved successfully", cat, nil)
 }
 
 // UpdateCategoryRequest for PUT /categories/:id
@@ -116,11 +128,11 @@ type UpdateCategoryRequest struct {
 
 func (h *CategoryHandler) Update(w http.ResponseWriter, r *http.Request, id string) {
 	if r.Method != http.MethodPut {
-		http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
+		apiresponse.Error(w, http.StatusMethodNotAllowed, "Method not allowed", []string{"method not allowed"})
 		return
 	}
 	if !isValidUUID(id) {
-		http.Error(w, "invalid category id", http.StatusBadRequest)
+		apiresponse.Error(w, http.StatusBadRequest, "Validation failed", []string{"invalid category id"})
 		return
 	}
 	userIDStr := UserIDFromRequest(r)
@@ -131,30 +143,29 @@ func (h *CategoryHandler) Update(w http.ResponseWriter, r *http.Request, id stri
 
 	var req UpdateCategoryRequest
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
-		http.Error(w, "invalid JSON", http.StatusBadRequest)
+		apiresponse.Error(w, http.StatusBadRequest, "Validation failed", []string{"invalid request body"})
 		return
 	}
 	input := domain.UpdateCategoryInput{Name: req.Name}
 	cat, err := h.categoryUC.Update(r.Context(), id, userID, input)
 	if err != nil {
-		http.Error(w, err.Error(), http.StatusInternalServerError)
+		apiresponse.InternalServerError(w)
 		return
 	}
 	if cat == nil {
-		http.Error(w, "not found", http.StatusNotFound)
+		apiresponse.Error(w, http.StatusNotFound, "Category not found", []string{"category not found"})
 		return
 	}
-	w.Header().Set("Content-Type", "application/json")
-	_ = json.NewEncoder(w).Encode(cat)
+	apiresponse.Success(w, http.StatusOK, "Category updated successfully", cat, nil)
 }
 
 func (h *CategoryHandler) Delete(w http.ResponseWriter, r *http.Request, id string) {
 	if r.Method != http.MethodDelete {
-		http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
+		apiresponse.Error(w, http.StatusMethodNotAllowed, "Method not allowed", []string{"method not allowed"})
 		return
 	}
 	if !isValidUUID(id) {
-		http.Error(w, "invalid category id", http.StatusBadRequest)
+		apiresponse.Error(w, http.StatusBadRequest, "Validation failed", []string{"invalid category id"})
 		return
 	}
 	var userID *string
@@ -164,11 +175,11 @@ func (h *CategoryHandler) Delete(w http.ResponseWriter, r *http.Request, id stri
 	err := h.categoryUC.Delete(r.Context(), id, userID)
 	if err != nil {
 		if isErrNoRows(err) {
-			http.Error(w, "not found", http.StatusNotFound)
+			apiresponse.Error(w, http.StatusNotFound, "Category not found", []string{"category not found"})
 			return
 		}
-		http.Error(w, err.Error(), http.StatusInternalServerError)
+		apiresponse.InternalServerError(w)
 		return
 	}
-	w.WriteHeader(http.StatusNoContent)
+	apiresponse.Success(w, http.StatusOK, "Category deleted successfully", nil, nil)
 }

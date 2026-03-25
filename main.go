@@ -21,6 +21,7 @@ func main() {
 	}
 
 	userRepo := repositoryPG.NewUserRepoPG(db.DB)
+	refreshTokenRepo := repositoryPG.NewRefreshTokenRepoPG(db.DB)
 	expenseRepo := infrarepo.NewExpenseRepoPG(db.DB)
 	debtReportRepo := repositoryPG.NewDebtRepoPG(db.DB)
 	debtRepo := infrarepo.NewDebtRepositoryPG(db.DB)
@@ -29,7 +30,7 @@ func main() {
 	hasher := auth.BcryptHasher{}
 	jwtSvc := auth.NewJWTService(os.Getenv("JWT_SECRET"))
 
-	authUC := usecases.NewAuthUsecase(userRepo, hasher, jwtSvc)
+	authUC := usecases.NewAuthUsecase(userRepo, refreshTokenRepo, hasher, jwtSvc)
 	userUC := usecases.NewUserUsecase(userRepo)
 	reportUC := usecases.NewReportUsecase(expenseRepo, debtReportRepo)
 	debtUsecase := usecases.NewDebtUsecase(debtRepo)
@@ -46,6 +47,8 @@ func main() {
 	mux := http.NewServeMux()
 	mux.HandleFunc("/auth/register", authHandler.Register)
 	mux.HandleFunc("/auth/login", authHandler.Login)
+	mux.HandleFunc("/auth/refresh", authHandler.Refresh)
+	mux.HandleFunc("/auth/logout", authHandler.Logout)
 	mux.HandleFunc("/user/profile", userHandler.GetProfile)
 	mux.HandleFunc("/user/update", userHandler.UpdateProfile)
 	mux.HandleFunc("/reports/weekly", reportHandler.GetWeeklyReport)

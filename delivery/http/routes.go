@@ -3,6 +3,8 @@ package http
 import (
 	"net/http"
 	"strings"
+
+	"expense_tracker/delivery/apiresponse"
 )
 
 // RegisterDebtRoutes registers debt endpoints on mux.
@@ -18,13 +20,13 @@ func RegisterDebtRoutes(mux *http.ServeMux, handler *DebtHandler) {
 		case http.MethodGet:
 			handler.ListDebts(w, r)
 		default:
-			http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
+			apiresponse.Error(w, http.StatusMethodNotAllowed, "Method not allowed", []string{"method not allowed"})
 		}
 	})
 
 	mux.HandleFunc("/debts/upcoming", func(w http.ResponseWriter, r *http.Request) {
 		if r.Method != http.MethodGet {
-			http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
+			apiresponse.Error(w, http.StatusMethodNotAllowed, "Method not allowed", []string{"method not allowed"})
 			return
 		}
 		handler.ListUpcomingDebts(w, r)
@@ -33,7 +35,7 @@ func RegisterDebtRoutes(mux *http.ServeMux, handler *DebtHandler) {
 	mux.HandleFunc("/debts/", func(w http.ResponseWriter, r *http.Request) {
 		if strings.HasSuffix(r.URL.Path, "/pay") {
 			if r.Method != http.MethodPatch {
-				http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
+				apiresponse.Error(w, http.StatusMethodNotAllowed, "Method not allowed", []string{"method not allowed"})
 				return
 			}
 			handler.MarkDebtPaid(w, r)
@@ -41,7 +43,7 @@ func RegisterDebtRoutes(mux *http.ServeMux, handler *DebtHandler) {
 		}
 
 		if r.Method != http.MethodPut {
-			http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
+			apiresponse.Error(w, http.StatusMethodNotAllowed, "Method not allowed", []string{"method not allowed"})
 			return
 		}
 		handler.UpdateDebt(w, r)
@@ -64,7 +66,7 @@ func RegisterExpenseRoutes(mux *http.ServeMux, handler *ExpenseHandler) {
 		case http.MethodPost:
 			handler.Create(w, r)
 		default:
-			http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
+			apiresponse.Error(w, http.StatusMethodNotAllowed, "Method not allowed", []string{"method not allowed"})
 		}
 	})
 	mux.HandleFunc("/expenses/", func(w http.ResponseWriter, r *http.Request) {
@@ -81,7 +83,7 @@ func RegisterExpenseRoutes(mux *http.ServeMux, handler *ExpenseHandler) {
 		case http.MethodDelete:
 			handler.Delete(w, r, id)
 		default:
-			http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
+			apiresponse.Error(w, http.StatusMethodNotAllowed, "Method not allowed", []string{"method not allowed"})
 		}
 	})
 }
@@ -102,7 +104,7 @@ func RegisterCategoryRoutes(mux *http.ServeMux, handler *CategoryHandler) {
 		case http.MethodPost:
 			handler.Create(w, r)
 		default:
-			http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
+			apiresponse.Error(w, http.StatusMethodNotAllowed, "Method not allowed", []string{"method not allowed"})
 		}
 	})
 	mux.HandleFunc("/categories/", func(w http.ResponseWriter, r *http.Request) {
@@ -119,7 +121,7 @@ func RegisterCategoryRoutes(mux *http.ServeMux, handler *CategoryHandler) {
 		case http.MethodDelete:
 			handler.Delete(w, r, id)
 		default:
-			http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
+			apiresponse.Error(w, http.StatusMethodNotAllowed, "Method not allowed", []string{"method not allowed"})
 		}
 	})
 }

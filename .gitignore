@@ -1,4 +1,6 @@
 .env
+.env.local
+.env.*.local
 
 # Binaries for programs and plugins
 *.exe
@@ -6,9 +8,16 @@
 *.dll
 *.so
 *.dylib
+*.out
+*.coverprofile
+coverage.out
 
 # Test binary, built with `go test -c`
 *.test
+
+# Go workspace / local build artifacts
+bin/
+dist/
 
 # GoLand
 .idea/
@@ -18,3 +27,6 @@
 
 # macos
 .DS_Store
+
+# Logs
+*.log

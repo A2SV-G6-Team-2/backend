@@ -1,98 +1,269 @@
-# Backend
+# Personal Expense Tracker Backend
 
-Backend repository for the Personal Expense Tracker final project @ A2SV
+Go backend for the A2SV Personal Expense Tracker project.
 
-## Database Setup
+## Stack
 
-1. Make sure PostgreSQL is installed and running.
-2. Create the database:
+- Go
+- `net/http`
+- PostgreSQL 15+
+- Goose migrations
+- JWT access and refresh tokens
+- OpenAPI / Swagger UI
 
-```bash
-createdb -U postgres Personal_Expense_tracker_DB
+## Project Structure
+
+```text
+.
+├── delivery/
+│   ├── apiresponse/        # shared JSON response and pagination helpers
+│   └── http/               # handlers, routes, middleware, Swagger
+├── domain/                 # core entities
+├── infrastructure/
+│   ├── auth/               # JWT and password hashing
+│   ├── db/                 # DB init and migrations
+│   └── repository*/        # PostgreSQL repository implementations
+├── repository/             # repository interfaces
+├── tests/                  # centralized test suite
+├── usecases/               # business logic
+└── main.go                 # app wiring
 ```
 
-3. Install Goose:
+## Environment
 
-```bash
-go install github.com/pressly/goose/v3/cmd/goose@latest
-```
-
-4. Run migrations (from repo root):
-
-```bash
-export DB_URL="postgres://$DB_USER:$DB_PASSWORD@$DB_HOST:$DB_PORT/$DB_NAME?sslmode=disable"
-goose -dir infrastructure/db/migrations postgres "$DB_URL" up
-```
-
-Replace **postgres** with your _PostgreSQL username_ if different.
-
-## Environment Setup
+Copy the example file and adjust it for your local machine:
 
 ```bash
 cp .env.example .env
 ```
 
-## How to run the application
+Typical local configuration:
+
+```env
+DB_USER=postgres
+DB_PASSWORD=
+DB_HOST=127.0.0.1
+DB_PORT=5432
+DB_NAME=expense_tracker_dev
+JWT_SECRET=development-secret
+ACCESS_TOKEN_TTL_HOURS=10
+REFRESH_TOKEN_TTL_HOURS=168
+```
+
+## Local Setup
+
+1. Make sure PostgreSQL is installed and running.
+2. Create the database:
+
+```bash
+createdb expense_tracker_dev
+```
+
+3. Start the application:
 
 ```bash
 go run main.go
 ```
 
-Server listens on `:8080` (or `PORT` env var).
+The server currently listens on `:8080`.
 
-**API documentation (Swagger):** [http://localhost:8080/api-docs](http://localhost:8080/api-docs) — Team 2 (Expenses & Categories) endpoints are grouped in subsections there.
+Important:
+- startup runs Goose migrations automatically
+- the app does not currently read a `PORT` env var; `main.go` binds to `:8080`
 
----
+## API Documentation
 
-## Team 2: Expenses & Categories API
+Swagger UI:
 
-Expense and category endpoints **require JWT authentication** (same as User profile). Obtain a token via `POST /auth/login`, then send:
+```text
+http://localhost:8080/api-docs
+```
 
-- **`Authorization: Bearer <token>`**
+Raw OpenAPI YAML:
 
-All expense and category operations are scoped to the authenticated user (ownership checks). `/api-docs` and `/` remain public.
+```text
+http://localhost:8080/openapi.yaml
+```
 
-### Expenses
+## Response Format
 
-| Method | Path            | Description                                                            |
-| ------ | --------------- | ---------------------------------------------------------------------- |
-| POST   | `/expenses`     | Create expense (body: amount, expense_date, category_id?, note?, etc.) |
-| GET    | `/expenses`     | List expenses (query: `from_date`, `to_date`, `category_id`)           |
-| GET    | `/expenses/:id` | Get one expense                                                        |
-| PUT    | `/expenses/:id` | Update expense                                                         |
-| DELETE | `/expenses/:id` | Delete expense                                                         |
+All HTTP APIs use the same top-level envelope:
 
-### Categories
+```json
+{
+  "success": true,
+  "message": "User fetched successfully",
+  "data": {},
+  "errors": null,
+  "meta": null
+}
+```
 
-| Method | Path              | Description                                    |
-| ------ | ----------------- | ---------------------------------------------- |
-| POST   | `/categories`     | Create category (body: name, user_id optional) |
-| GET    | `/categories`     | List global + user's categories                |
-| GET    | `/categories/:id` | Get category by ID                             |
-| PUT    | `/categories/:id` | Update category (own only)                     |
-| DELETE | `/categories/:id` | Delete category (own only)                     |
+Error responses always use `errors` as an array of strings:
 
-### Example (curl)
+```json
+{
+  "success": false,
+  "message": "Validation failed",
+  "data": null,
+  "errors": [
+    "email is required",
+    "password must be at least 8 characters"
+  ],
+  "meta": null
+}
+```
+
+List endpoints return `data.items` and pagination metadata:
+
+```json
+{
+  "success": true,
+  "message": "Expenses retrieved successfully",
+  "data": {
+    "items": []
+  },
+  "errors": null,
+  "meta": {
+    "pagination": {
+      "page": 1,
+      "page_size": 10,
+      "total_items": 0,
+      "total_pages": 0,
+      "has_next": false,
+      "has_previous": false
+    }
+  }
+}
+```
+
+## Authentication
+
+Auth flow:
+
+1. Register with `POST /auth/register`
+2. Login with `POST /auth/login`
+3. Use `Authorization: Bearer <access_token>` for protected APIs
+4. Rotate tokens with `POST /auth/refresh`
+5. Revoke the current refresh token with `POST /auth/logout`
+
+Current defaults:
+- access token TTL: 10 hours
+- refresh token TTL: 7 days
+
+Password policy:
+- minimum 8 characters
+- at least one uppercase letter
+- at least one lowercase letter
+- at least one digit
+- at least one special character
+
+## Main Endpoints
+
+Authentication:
+- `POST /auth/register`
+- `POST /auth/login`
+- `POST /auth/refresh`
+- `POST /auth/logout`
+
+User:
+- `GET /user/profile`
+- `PUT /user/update`
+
+Expenses:
+- `GET /expenses`
+- `POST /expenses`
+- `GET /expenses/{id}`
+- `PUT /expenses/{id}`
+- `DELETE /expenses/{id}`
+
+Categories:
+- `GET /categories`
+- `POST /categories`
+- `GET /categories/{id}`
+- `PUT /categories/{id}`
+- `DELETE /categories/{id}`
+
+Debts:
+- `GET /debts`
+- `POST /debts`
+- `GET /debts/upcoming`
+- `PUT /debts/{id}`
+- `PATCH /debts/{id}/pay`
+
+Reports:
+- `GET /reports/daily`
+- `GET /reports/weekly`
+- `GET /reports/monthly`
+
+## Pagination
+
+List endpoints use:
+
+- `page`, default `1`
+- `page_size`, default `10`
+
+Validation rules:
+- `page >= 1`
+- `1 <= page_size <= 100`
+
+## Example Requests
+
+Login:
 
 ```bash
-# 1. Login to get token
-TOKEN=$(curl -s -X POST http://localhost:8080/auth/login \
+curl -X POST http://localhost:8080/auth/login \
   -H "Content-Type: application/json" \
-  -d '{"email":"user@example.com","password":"yourpassword"}' | jq -r '.token')
+  -d '{"email":"user@example.com","password":"Secure123!"}'
+```
 
-# 2. Create category (user-defined)
+Refresh tokens:
+
+```bash
+curl -X POST http://localhost:8080/auth/refresh \
+  -H "Content-Type: application/json" \
+  -d '{"refresh_token":"<refresh-token>"}'
+```
+
+Logout:
+
+```bash
+curl -X POST http://localhost:8080/auth/logout \
+  -H "Content-Type: application/json" \
+  -d '{"refresh_token":"<refresh-token>"}'
+```
+
+List expenses:
+
+```bash
+curl -X GET "http://localhost:8080/expenses?page=1&page_size=10&from_date=2026-02-01&to_date=2026-02-28" \
+  -H "Authorization: Bearer <access-token>"
+```
+
+Create category:
+
+```bash
 curl -X POST http://localhost:8080/categories \
   -H "Content-Type: application/json" \
-  -H "Authorization: Bearer $TOKEN" \
+  -H "Authorization: Bearer <access-token>" \
   -d '{"name":"Food"}'
+```
 
-# 3. Create expense
+Create expense:
+
+```bash
 curl -X POST http://localhost:8080/expenses \
   -H "Content-Type: application/json" \
-  -H "Authorization: Bearer $TOKEN" \
-  -d '{"amount":50,"expense_date":"2026-02-12","category_id":"<category-uuid>","note":"Lunch"}'
-
-# 4. List expenses (optional filters)
-curl -H "Authorization: Bearer $TOKEN" \
-  "http://localhost:8080/expenses?from_date=2026-02-01&to_date=2026-02-28"
+  -H "Authorization: Bearer <access-token>" \
+  -d '{"amount":50,"expense_date":"2026-02-12","note":"Lunch"}'
 ```
+
+## Tests
+
+Run the full test suite:
+
+```bash
+go test ./...
+```
+
+The test files are centralized under [tests](/Volumes/Mike%20Data/Projects/A2SV/backend/tests).

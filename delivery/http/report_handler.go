@@ -2,11 +2,10 @@ package http
 
 import (
 	"errors"
-	"expense_tracker/delivery/utils"
+	"expense_tracker/delivery/apiresponse"
 	"expense_tracker/infrastructure/auth"
 	"expense_tracker/usecases"
 	"net/http"
-	"strings"
 	"time"
 )
 
@@ -22,17 +21,9 @@ func NewReportHandler(uc usecases.ReportUsecase, jwt *auth.JWTService) *ReportHa
 // Daily Handler
 
 func (h *ReportHandler) GetDailyReport(w http.ResponseWriter, r *http.Request) {
-
-	authHeader := r.Header.Get("Authorization")
-	if authHeader == "" {
-		utils.WriteJSON(w, http.StatusUnauthorized, utils.Envelope{"error": "missing authorization header"})
-		return
-	}
-
-	tokenStr := strings.TrimPrefix(authHeader, "Bearer ")
-	userID, err := h.jwt.Validate(tokenStr)
+	userID, err := authenticateRequest(r, h.jwt)
 	if err != nil {
-		utils.WriteJSON(w, http.StatusUnauthorized, utils.Envelope{"error": "invalid token"})
+		writeUnauthorized(w, err)
 		return
 	}
 
@@ -40,7 +31,7 @@ func (h *ReportHandler) GetDailyReport(w http.ResponseWriter, r *http.Request) {
 	dateParam := query.Get("date")
 
 	if dateParam == "" {
-		utils.WriteJSON(w, http.StatusBadRequest, utils.Envelope{"error": "date is required"})
+		apiresponse.Error(w, http.StatusBadRequest, "Validation failed", []string{"date is required"})
 		return
 	}
 
@@ -48,30 +39,23 @@ func (h *ReportHandler) GetDailyReport(w http.ResponseWriter, r *http.Request) {
 
 	date, err := time.Parse(layout, dateParam)
 	if err != nil {
-		utils.WriteJSON(w, http.StatusBadRequest, utils.Envelope{"error": "invalid date format"})
+		apiresponse.Error(w, http.StatusBadRequest, "Validation failed", []string{"date must use YYYY-MM-DD"})
 		return
 	}
 
 	dailyReport, err := h.reportUC.GetDailyReport(r.Context(), userID, date)
 	if err != nil {
-		utils.WriteJSON(w, http.StatusInternalServerError, utils.Envelope{"error": "internal server error"})
+		apiresponse.InternalServerError(w)
 		return
 	}
 
-	utils.WriteJSON(w, http.StatusOK, utils.Envelope{"data": dailyReport})
+	apiresponse.Success(w, http.StatusOK, "Daily report retrieved successfully", dailyReport, nil)
 }
 
 func (h *ReportHandler) GetWeeklyReport(w http.ResponseWriter, r *http.Request) {
-	authHeader := r.Header.Get("Authorization")
-	if authHeader == "" {
-		utils.WriteJSON(w, http.StatusUnauthorized, utils.Envelope{"error": "missing authorization header"})
-		return
-	}
-
-	tokenStr := strings.TrimPrefix(authHeader, "Bearer ")
-	userID, err := h.jwt.Validate(tokenStr)
+	userID, err := authenticateRequest(r, h.jwt)
 	if err != nil {
-		utils.WriteJSON(w, http.StatusUnauthorized, utils.Envelope{"error": "invalid token"})
+		writeUnauthorized(w, err)
 		return
 	}
 
@@ -79,61 +63,54 @@ func (h *ReportHandler) GetWeeklyReport(w http.ResponseWriter, r *http.Request) 
 	startDateParam := query.Get("start")
 	endDateParam := query.Get("end")
 	if startDateParam == "" || endDateParam == "" {
-		utils.WriteJSON(w, http.StatusBadRequest, utils.Envelope{"error": "start and end are required"})
+		apiresponse.Error(w, http.StatusBadRequest, "Validation failed", []string{"start and end are required"})
 		return
 	}
 
 	layout := "2006-01-02"
 	startDate, err := time.Parse(layout, startDateParam)
 	if err != nil {
-		utils.WriteJSON(w, http.StatusBadRequest, utils.Envelope{"error": "invalid start date"})
+		apiresponse.Error(w, http.StatusBadRequest, "Validation failed", []string{"start must use YYYY-MM-DD"})
 		return
 	}
 	endDate, err := time.Parse(layout, endDateParam)
 	if err != nil {
-		utils.WriteJSON(w, http.StatusBadRequest, utils.Envelope{"error": "invalid end date"})
+		apiresponse.Error(w, http.StatusBadRequest, "Validation failed", []string{"end must use YYYY-MM-DD"})
 		return
 	}
 
 	weeklyReport, err := h.reportUC.GetWeeklyReport(r.Context(), userID, startDate, endDate)
 	if err != nil {
 		if errors.Is(err, usecases.ErrInvalidDateRange) {
-			utils.WriteJSON(w, http.StatusBadRequest, utils.Envelope{"error": err.Error()})
+			apiresponse.Error(w, http.StatusBadRequest, "Validation failed", []string{err.Error()})
 			return
 		}
-		utils.WriteJSON(w, http.StatusInternalServerError, utils.Envelope{"error": "internal server error"})
+		apiresponse.InternalServerError(w)
 		return
 	}
 
-	utils.WriteJSON(w, http.StatusOK, utils.Envelope{"data": weeklyReport})
+	apiresponse.Success(w, http.StatusOK, "Weekly report retrieved successfully", weeklyReport, nil)
 }
 
 // Monthly Handler
 func (h *ReportHandler) GetMonthlyReport(w http.ResponseWriter, r *http.Request) {
-	authHeader := r.Header.Get("Authorization")
-	if authHeader == "" {
-		utils.WriteJSON(w, http.StatusUnauthorized, utils.Envelope{"error": "missing authorization header"})
-		return
-	}
-
-	tokenStr := strings.TrimPrefix(authHeader, "Bearer ")
-	userID, err := h.jwt.Validate(tokenStr)
+	userID, err := authenticateRequest(r, h.jwt)
 	if err != nil {
-		utils.WriteJSON(w, http.StatusUnauthorized, utils.Envelope{"error": "invalid token"})
+		writeUnauthorized(w, err)
 		return
 	}
 
 	query := r.URL.Query()
 	monthParam := query.Get("month")
 	if monthParam == "" {
-		utils.WriteJSON(w, http.StatusBadRequest, utils.Envelope{"error": "month is required (YYYY-MM)"})
+		apiresponse.Error(w, http.StatusBadRequest, "Validation failed", []string{"month is required and must use YYYY-MM"})
 		return
 	}
 
 	layout := "2006-01"
 	parsed, err := time.Parse(layout, monthParam)
 	if err != nil {
-		utils.WriteJSON(w, http.StatusBadRequest, utils.Envelope{"error": "invalid month format"})
+		apiresponse.Error(w, http.StatusBadRequest, "Validation failed", []string{"month must use YYYY-MM"})
 		return
 	}
 
@@ -142,9 +119,9 @@ func (h *ReportHandler) GetMonthlyReport(w http.ResponseWriter, r *http.Request)
 
 	monthlyReport, err := h.reportUC.GetMonthlyReport(r.Context(), userID, year, month)
 	if err != nil {
-		utils.WriteJSON(w, http.StatusInternalServerError, utils.Envelope{"error": "internal server error"})
+		apiresponse.InternalServerError(w)
 		return
 	}
 
-	utils.WriteJSON(w, http.StatusOK, utils.Envelope{"data": monthlyReport})
+	apiresponse.Success(w, http.StatusOK, "Monthly report retrieved successfully", monthlyReport, nil)
 }

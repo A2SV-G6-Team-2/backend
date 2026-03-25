@@ -27,8 +27,8 @@ func (uc *CategoryUseCase) GetByID(ctx context.Context, id string, userID *strin
 }
 
 // List returns categories: global only if userID nil, else global + user's
-func (uc *CategoryUseCase) List(ctx context.Context, userID *string) ([]*domain.Category, error) {
-	return uc.categoryRepo.List(ctx, userID)
+func (uc *CategoryUseCase) List(ctx context.Context, userID *string, options repository.ListOptions) ([]*domain.Category, int, error) {
+	return uc.categoryRepo.List(ctx, userID, options)
 }
 
 // Update updates a category (ownership: only own or global when userID nil)

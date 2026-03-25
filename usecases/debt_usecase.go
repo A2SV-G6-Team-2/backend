@@ -9,13 +9,13 @@ import (
 )
 
 var (
-	ErrDebtIDRequired      = errors.New("debt id is required")
-	ErrUserIDRequired      = errors.New("user id is required")
-	ErrDebtTypeRequired    = errors.New("debt type is required")
-	ErrPeerNameRequired    = errors.New("peer name is required")
+	ErrDebtIDRequired       = errors.New("debt id is required")
+	ErrUserIDRequired       = errors.New("user id is required")
+	ErrDebtTypeRequired     = errors.New("debt type is required")
+	ErrPeerNameRequired     = errors.New("peer name is required")
 	ErrAmountMustBePositive = errors.New("amount must be positive")
-	ErrDueDateInPast       = errors.New("due date cannot be in the past")
-	ErrDebtAlreadyPaid     = errors.New("debt is already paid")
+	ErrDueDateInPast        = errors.New("due date cannot be in the past")
+	ErrDebtAlreadyPaid      = errors.New("debt is already paid")
 )
 
 type DebtUsecase struct {
@@ -103,21 +103,21 @@ func (u *DebtUsecase) GetByID(ctx context.Context, id string) (*domain.Debt, err
 	return u.repo.GetByID(ctx, id)
 }
 
-func (u *DebtUsecase) ListByUser(ctx context.Context, userID string) ([]*domain.Debt, error) {
+func (u *DebtUsecase) ListByUser(ctx context.Context, userID string, options repository.ListOptions) ([]*domain.Debt, int, error) {
 	if userID == "" {
-		return nil, ErrUserIDRequired
+		return nil, 0, ErrUserIDRequired
 	}
-	return u.repo.ListByUser(ctx, userID)
+	return u.repo.ListByUser(ctx, userID, options)
 }
 
-func (u *DebtUsecase) ListUpcoming(ctx context.Context, userID string, days int) ([]*domain.Debt, error) {
+func (u *DebtUsecase) ListUpcoming(ctx context.Context, userID string, days int, options repository.ListOptions) ([]*domain.Debt, int, error) {
 	if userID == "" {
-		return nil, ErrUserIDRequired
+		return nil, 0, ErrUserIDRequired
 	}
 	if days <= 0 {
-		return nil, errors.New("days must be positive")
+		return nil, 0, errors.New("days must be positive")
 	}
-	return u.repo.ListUpcoming(ctx, userID, days)
+	return u.repo.ListUpcoming(ctx, userID, days, options)
 }
 
 func (u *DebtUsecase) MarkPaid(ctx context.Context, id string) (*domain.Debt, error) {

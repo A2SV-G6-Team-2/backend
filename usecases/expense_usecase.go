@@ -28,9 +28,9 @@ func (uc *ExpenseUseCase) GetByID(ctx context.Context, id, userID string) (*doma
 }
 
 // List returns expenses for the user with optional filters (ownership: userID required)
-func (uc *ExpenseUseCase) List(ctx context.Context, filter domain.ExpenseFilter) ([]*domain.Expense, error) {
+func (uc *ExpenseUseCase) List(ctx context.Context, filter domain.ExpenseFilter) ([]*domain.Expense, int, error) {
 	if filter.UserID == "" {
-		return nil, nil // or return error
+		return nil, 0, nil
 	}
 	return uc.expenseRepo.List(ctx, filter)
 }
