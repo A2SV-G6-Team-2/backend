@@ -37,7 +37,10 @@ func (u *DebtUsecase) Create(ctx context.Context, debt *domain.Debt) error {
 		return errors.New("debt is required")
 	}
 	if debt.ID == "" {
-		return ErrDebtIDRequired
+		// Generate an ID when the client doesn't provide one. This keeps
+		// create calls ergonomic from clients while preserving the
+		// requirement that other usecase methods operate on an ID.
+		debt.ID = uuid.New().String()
 	}
 	if debt.UserID == "" {
 		return ErrUserIDRequired
