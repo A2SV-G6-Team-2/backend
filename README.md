@@ -34,6 +34,18 @@ Go backend for the A2SV Personal Expense Tracker project.
 Copy the example file and adjust it for your local machine:
 
 ```bash
+Postman collection & smoke test
+--------------------------------
+
+- Postman collection (importable): `docs/postman_collection.json` — contains basic flows (register -> login -> create debt -> create expense -> list). Import into Postman and run.
+- Smoke-test script: `scripts/smoke-test.sh` — a small bash script that exercises the main flows using curl. It requires `curl` and (optional but recommended) `jq` for parsing. Example:
+
+```bash
+chmod +x scripts/smoke-test.sh
+BASE_URL=http://localhost:8080 ./scripts/smoke-test.sh
+```
+
+If you want a CI-friendly smoke test, I can convert the script into a containerized job or a GitHub Actions workflow.
 cp .env.example .env
 ```
 
@@ -73,16 +85,16 @@ Important:
 
 ## API Documentation
 
-Swagger UI:
+Interactive Swagger UI:
 
 ```text
 http://localhost:8080/api-docs
 ```
 
-Raw OpenAPI YAML:
+Raw OpenAPI YAML (served with the docs):
 
 ```text
-http://localhost:8080/openapi.yaml
+http://localhost:8080/api-docs/openapi.yaml
 ```
 
 ## Response Format
@@ -160,41 +172,90 @@ Password policy:
 
 ## Main Endpoints
 
-Authentication:
-- `POST /auth/register`
-- `POST /auth/login`
-- `POST /auth/refresh`
-- `POST /auth/logout`
+Below is a comprehensive list of the HTTP endpoints implemented by the server, grouped by area. All protected endpoints require an `Authorization: Bearer <access_token>` header.
 
-User:
-- `GET /user/profile`
-- `PUT /user/update`
+Authentication
+- POST /auth/register — register new user (body: name, email, password)
+- POST /auth/login — login (body: email, password) -> returns access_token and refresh_token
+- POST /auth/refresh — refresh tokens (body: refresh_token)
+- POST /auth/logout — revoke refresh token (body: refresh_token)
 
-Expenses:
-- `GET /expenses`
-- `POST /expenses`
-- `GET /expenses/{id}`
-- `PUT /expenses/{id}`
-- `DELETE /expenses/{id}`
+User
+- GET /user/profile — get authenticated user's profile
+- PUT /user/update — update authenticated user's profile (partial updates supported)
 
-Categories:
-- `GET /categories`
-- `POST /categories`
-- `GET /categories/{id}`
-- `PUT /categories/{id}`
-- `DELETE /categories/{id}`
+Expenses
+- GET /expenses — list expenses (query: from_date, to_date, category_id, page, page_size)
+- POST /expenses — create expense (body: CreateExpenseRequest)
+- GET /expenses/{id} — get expense by id
+- PUT /expenses/{id} — update expense (body: UpdateExpenseRequest)
+- DELETE /expenses/{id} — delete expense
 
-Debts:
-- `GET /debts`
-- `POST /debts`
-- `GET /debts/upcoming`
-- `PUT /debts/{id}`
-- `PATCH /debts/{id}/pay`
+Categories
+- GET /categories — list categories (page, page_size)
+- POST /categories — create category (body: CreateCategoryRequest)
+- GET /categories/{id} — get category
+- PUT /categories/{id} — update category
+- DELETE /categories/{id} — delete category
 
-Reports:
-- `GET /reports/daily`
-- `GET /reports/weekly`
-- `GET /reports/monthly`
+Debts
+- GET /debts — list debts (page, page_size)
+- POST /debts — create a debt (body: CreateDebtInput)
+- GET /debts/upcoming — list upcoming debts (query: days, page, page_size)
+- PUT /debts/{id} — update a debt (full update; see notes)
+- PATCH /debts/{id}/pay — mark a debt as paid
+
+Reports
+- GET /reports/daily — daily report (query: date)
+- GET /reports/weekly — weekly report (query: start, end)
+- GET /reports/monthly — monthly report (query: month YYYY-MM)
+
+Documentation
+- GET /api-docs — Swagger UI redirect
+- GET /api-docs/ — Swagger UI HTML
+- GET /api-docs/openapi.yaml — raw OpenAPI specification
+
+Notes about the Debts API
+- ID generation: `POST /debts` will generate a UUID server-side if you omit `id`. If you provide `id` in the request it must be a valid UUID string (Postgres enforces uuid column type).
+- PUT semantics: `PUT /debts/{id}` is implemented as a full update. The handler currently expects required fields to be present: `type`, `peer_name`, `amount`, and `due_date` (formatted YYYY-MM-DD). Omitting `due_date` will cause a validation error because the handler attempts to parse it.
+- Partial updates: there is no dedicated PATCH endpoint for partial debt updates (except for the `pay` path which updates status). If you need partial updates for debts I can add a PATCH endpoint or modify the PUT handler to merge omitted fields with the existing resource.
+
+Quick debt examples (curl)
+Create (server generates id):
+```bash
+curl -i -X POST "http://localhost:8080/debts" \
+  -H "Authorization: Bearer <TOKEN>" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "type":"lent",
+    "peer_name":"Alex",
+    "amount":100.50,
+    "due_date":"2026-03-30",
+    "reminder_enabled":false,
+    "note":"Movie tickets"
+  }'
+```
+
+Full update (PUT) — include due_date:
+```bash
+curl -i -X PUT "http://localhost:8080/debts/<DEBT_ID>" \
+  -H "Authorization: Bearer <TOKEN>" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "type":"lent",
+    "peer_name":"Alex",
+    "amount":150.00,
+    "due_date":"2026-04-15",
+    "reminder_enabled":false,
+    "note":"Updated amount"
+  }'
+```
+
+Mark paid:
+```bash
+curl -i -X PATCH "http://localhost:8080/debts/<DEBT_ID>/pay" \
+  -H "Authorization: Bearer <TOKEN>"
+```
 
 ## Pagination
 
@@ -257,13 +318,3 @@ curl -X POST http://localhost:8080/expenses \
   -H "Authorization: Bearer <access-token>" \
   -d '{"amount":50,"expense_date":"2026-02-12","note":"Lunch"}'
 ```
-
-## Tests
-
-Run the full test suite:
-
-```bash
-go test ./...
-```
-
-The test files are centralized under [tests](/Volumes/Mike%20Data/Projects/A2SV/backend/tests).

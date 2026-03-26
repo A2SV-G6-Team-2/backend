@@ -23,6 +23,73 @@ info:
     - Interactive API documentation
   version: 1.0.0
 
+# Quick machine-readable summary of endpoints (helps tools and quick index)
+x-summary-endpoints:
+  - path: /auth/register
+    methods: [post]
+  - path: /auth/login
+    methods: [post]
+  - path: /auth/refresh
+    methods: [post]
+  - path: /auth/logout
+    methods: [post]
+  - path: /user/profile
+    methods: [get]
+  - path: /user/update
+    methods: [put]
+  - path: /expenses
+    methods: [get, post]
+  - path: /expenses/{id}
+    methods: [get, put, delete]
+  - path: /categories
+    methods: [get, post]
+  - path: /categories/{id}
+    methods: [get, put, delete]
+  - path: /debts
+    methods: [get, post]
+  - path: /debts/upcoming
+    methods: [get]
+  - path: /debts/{id}
+    methods: [put]
+  - path: /debts/{id}/pay
+    methods: [patch]
+  - path: /reports/weekly
+    methods: [get]
+  - path: /reports/daily
+    methods: [get]
+  - path: /reports/monthly
+    methods: [get]
+  - path: /api-docs
+    methods: [get]
+  - path: /api-docs/
+    methods: [get]
+  - path: /api-docs/openapi.yaml
+    methods: [get]
+
+# Human-friendly notes about specific endpoints and expected request shapes
+x-endpoint-notes:
+  /debts:
+    POST:
+      description: |
+        Create a debt. The server will generate `id` if omitted. Required fields: `type`, `peer_name`, `amount`, `due_date` (YYYY-MM-DD).
+      examples:
+        minimal:
+          type: lent
+          peer_name: Alex
+          amount: 100.50
+          due_date: 2026-03-30
+    GET:
+      description: List debts for authenticated user (supports pagination)
+  /debts/{id}:
+    PUT:
+      description: |
+        Full update of a debt. The current implementation requires all core fields to be present
+        (type, peer_name, amount, due_date). Omitting `due_date` will cause a validation error as
+        the handler parses the field.
+  /debts/{id}/pay:
+    PATCH:
+      description: Mark a debt as paid (updates status and sent_at)
+
 servers:
   - url: http://localhost:8080
     description: Local development server
