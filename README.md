@@ -4,12 +4,22 @@ Go backend for the A2SV Personal Expense Tracker project.
 
 ## Stack
 
-- Go
-- `net/http`
-- PostgreSQL 15+
-- Goose migrations
-- JWT access and refresh tokens
-- OpenAPI / Swagger UI
+- Go - Backend API (Golang)
+- PostgreSQL 15+ - Database
+- Goose - Database migrations
+- JWT - Authentication
+- Bcrypt - Password hashing
+- OpenAPI / Swagger UI - API documentation
+- Groq - AI-powered spending insights
+
+## Features
+
+- User authentication with JWT
+- Expense tracking with categories
+- Debt management
+- Spending reports
+- **AI-Powered Spending Insights** - Get personalized financial advice and trend analysis
+- Interactive swagger API documentation
 
 ## Project Structure
 
@@ -17,7 +27,7 @@ Go backend for the A2SV Personal Expense Tracker project.
 .
 ├── delivery/
 │   ├── apiresponse/        # shared JSON response and pagination helpers
-│   └── http/               # handlers, routes, middleware, Swagger
+│   └── http/               # handlers, routes, middleware, Swagger, AI
 ├── domain/                 # core entities
 ├── infrastructure/
 │   ├── auth/               # JWT and password hashing
@@ -48,7 +58,13 @@ DB_NAME=expense_tracker_dev
 JWT_SECRET=development-secret
 ACCESS_TOKEN_TTL_HOURS=10
 REFRESH_TOKEN_TTL_HOURS=168
+GEMINI_API_KEY=API_Key_for_Groq
+GEMINI_API_URL=API_endpoint_URL (https://api.groq.com/openai/v1/chat/completions)
+GEMINI_MODEL=Model_name (llama-3.3-70b-versatile)
+
 ```
+**Note:** AI insights are optional. If `GEMINI_API_KEY` is not set, reports will return `"insight": "No insight available"` without affecting core functionality.
+
 
 ## Local Setup
 
@@ -70,6 +86,8 @@ The server currently listens on `:8080`.
 Important:
 - startup runs Goose migrations automatically
 - the app does not currently read a `PORT` env var; `main.go` binds to `:8080`
+
+
 
 ## API Documentation
 
@@ -195,8 +213,8 @@ Debts
 
 Reports
 - GET /reports/daily — daily report (query: date)
-- GET /reports/weekly — weekly report (query: start, end)
-- GET /reports/monthly — monthly report (query: month YYYY-MM)
+- GET /reports/weekly — weekly report with AI insight (query: start, end)
+- GET /reports/monthly — monthly report with AI insight (query: month YYYY-MM)
 
 Documentation
 - GET /api-docs — Swagger UI redirect
