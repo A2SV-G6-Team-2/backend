@@ -5,6 +5,8 @@ import (
 	"net/http"
 	"os"
 
+	"github.com/joho/godotenv"
+
 	httpdelivery "expense_tracker/delivery/http"
 	"expense_tracker/infrastructure/auth"
 	"expense_tracker/infrastructure/db"
@@ -15,6 +17,10 @@ import (
 
 func main() {
 	log.Println("Starting Expense Tracker server...")
+
+	if err := godotenv.Load(); err == nil {
+		log.Println("Loaded .env file")
+	}
 
 	if err := db.DB_Init(); err != nil {
 		log.Fatalf("failed to initialize database: %v", err)

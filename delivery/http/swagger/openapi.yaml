@@ -19,8 +19,9 @@ info:
     - User authentication and profile management
     - Expense tracking with categories
     - Debt tracking (lent/borrowed)
-    - Spending reports and insights
+    - Spending reports and personal AI insights and recommendations
     - Interactive API documentation
+  
   version: 1.0.0
 
 # Quick summary of endpoints
@@ -91,8 +92,11 @@ endpoint-notes:
       description: Mark a debt as paid (updates status and sent_at)
 
 servers:
-  - url: http://localhost:8080
-    description: Local development server
+  - url: http://159.89.165.171:8080/
+    description: Deployed server
+
+  - url: http://159.89.165.171:8080/api-docs
+    description: Interactive swagger API documentation
 
 tags:
   - name: Authentication
@@ -945,8 +949,8 @@ paths:
     get:
       tags:
         - Reports
-      summary: Get weekly spending report
-      description: Get expense and debt summary for a date range
+      summary: Get weekly spending report with AI insights
+      description: Get expense and debt summary for a date range with AI-generated spending insights
       security:
         - BearerAuth: []
       parameters:
@@ -968,7 +972,7 @@ paths:
           example: "2024-01-07"
       responses:
         '200':
-          description: Weekly report generated successfully
+          description: Weekly report generated successfully with AI insight
           content:
             application/json:
               schema:
@@ -1051,8 +1055,8 @@ paths:
     get:
       tags:
         - Reports
-      summary: Get monthly spending report
-      description: Get expense and debt summary for a given month
+      summary: Get monthly spending report with AI insights
+      description: Get expense and debt summary for a given month with AI-generated spending insights and trend analysis
       security:
         - BearerAuth: []
       parameters:
@@ -1065,7 +1069,7 @@ paths:
             example: "2024-01"
       responses:
         '200':
-          description: Monthly report generated successfully
+          description: Monthly report generated successfully with AI insights
           content:
             application/json:
               schema:
@@ -1840,6 +1844,10 @@ components:
                 type: number
                 format: float
                 example: 120.50
+        insight:
+          type: string
+          description: AI-generated spending insight (may be "No insight available" if AI service is unavailable)
+          example: "This week you spent 15% more than last week, mainly on food and entertainment. Consider setting a weekly budget for dining out to save money."        
 
     DailyReport:
       type: object
@@ -1893,6 +1901,10 @@ components:
                 type: number
                 format: float
                 example: 120.50
+        insight:
+          type: string
+          description: AI-generated monthly spending insight with trend analysis (may be "No insight available" if AI service is unavailable)
+          example: "Compared to last month, your total spending rose by 8% driven by entertainment. This indicates a temporary relaxation of your usual spending habit; consider setting a weekly entertainment budget to avoid further increases."
 
     WeeklyReportSuccessResponse:
       allOf:
